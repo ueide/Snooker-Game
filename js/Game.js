@@ -2,11 +2,11 @@
 class Game {
     static CANVAS_WIDTH = 1440;
     static CANVAS_HEIGHT = 772;
-    static TABLE_WIDTH = 740;
+    static TABLE_WIDTH = 740; 
     static TABLE_HEIGHT = Game.TABLE_WIDTH/ 2; // Standard snooker table ratio 2:1
 
-    static TABLE_X_OFFSET = (Game.CANVAS_WIDTH - Game.TABLE_WIDTH) / 2;
-    static TABLE_Y_OFFSET = (Game.CANVAS_HEIGHT - Game.TABLE_HEIGHT) / 2;
+    static TABLE_X_OFFSET = (Game.CANVAS_WIDTH - Game.TABLE_WIDTH) / 2; //350
+    static TABLE_Y_OFFSET = (Game.CANVAS_HEIGHT - Game.TABLE_HEIGHT) / 2; //201
 
     constructor() {
         this.playerScore = 0;
@@ -52,7 +52,7 @@ class Game {
     }
 
     setMode(mode) {
-        this.mode = newMode;
+        this.mode = mode;
         console.log(`Game mode: ${this.mode}`);
     }
 

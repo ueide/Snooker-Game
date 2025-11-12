@@ -7,6 +7,7 @@ var Engine = Matter.Engine,
 
 //Global variables
 let snookerGame;
+let snookerTable;
 
 
 function setup() {
@@ -18,8 +19,9 @@ function setup() {
     world.gravity.y = 0; // No gravity in the snooker table
 
 
-    // New Game instance
-    snookerGame = new Game();
+    // Create instances
+    snookerGame = new Game(); // New Game instance
+    snookerTable = new Table(); // New Table instance
 
     // Run the engine
     Runner.run(engine);
@@ -35,12 +37,10 @@ function draw() {
 
     // Display header
     snookerGame.displayHeader();
+    // Display table
+    snookerTable.display();
 
 
-    //Placeholder for the table
-    fill(34, 139, 32); // Green background for the table
-    noStroke();
-    rect(Game.TABLE_X_OFFSET, Game.TABLE_Y_OFFSET - 24, Game.TABLE_WIDTH, Game.TABLE_HEIGHT, 20);
 
     //Placeholder for Mode selection
     fill(255);
