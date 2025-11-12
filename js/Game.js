@@ -1,7 +1,7 @@
 
 class Game {
     static CANVAS_WIDTH = 1440;
-    static CANVAS_HEIGHT = 772;
+    static CANVAS_HEIGHT = 700;
     static TABLE_WIDTH = 740; 
     static TABLE_HEIGHT = Game.TABLE_WIDTH/ 2; // Standard snooker table ratio 2:1
 
