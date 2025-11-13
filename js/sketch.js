@@ -8,6 +8,7 @@ var Engine = Matter.Engine,
 //Global variables
 let snookerGame;
 let snookerTable;
+let poolCue;
 
 
 function setup() {
@@ -20,8 +21,9 @@ function setup() {
 
 
     // Create instances
-    snookerGame = new Game(); // New Game instance
-    snookerTable = new Table(); // New Table instance
+    snookerGame = new Game(); // Game instance
+    snookerTable = new Table(); // Table instance
+    poolCue = new PoolCue(); // PoolCue instance
 
 
     // Run the engine
@@ -45,6 +47,9 @@ function draw() {
     // Display table
     snookerTable.display();
 
+    // Display pool cue
+    poolCue.display(mouseX, mouseY);
+
 }
 
 
@@ -61,5 +66,32 @@ function keyPressed() {
         snookerGame.setGameMode(2);
     } else if (key === '3') {
         snookerGame.setGameMode(3);
+    }
+}
+
+
+function mousePressed() {
+
+    if(!poolCue) return;
+
+    if(!poolCue.isLocked) {
+        const areaX = Game.CANVAS_WIDTH/2;
+        const areaY = Game.CANVAS_HEIGHT/2;
+
+        poolCue.isLocked = true;
+        poolCue.lockPositionX = mouseX;
+        poolCue.lockPositionY = mouseY;
+
+        poolCue.lockAngle = atan2(mouseY - areaY, mouseX - areaX);
+
+        console.log(`Cue locked at position: (${mouseX}, ${mouseY}) with angle: ${poolCue.lockAngle}`);
+    }
+    
+}
+
+function doubleClicked() {
+    if(poolCue && poolCue.isLocked) {
+        poolCue.isLocked = false;
+        console.log("Cue unlocked.");
     }
 }
