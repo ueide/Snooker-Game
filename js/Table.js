@@ -98,7 +98,7 @@ class Table {
         drawingContext.fillStyle = gradient; // Apply gradient to fill style
         
         // Felt surface
-        rect(feltX - cushion_w, feltY - cushion_w, feltWidth + cushion_w * 2, feltHeight + cushion_w * 2, 12);
+        rect(feltX - cushion_w, feltY - cushion_w, feltWidth + cushion_w * 2, feltHeight + cushion_w * 2);
         fill(255); // Reset fill to white
         // ---- END FELT ---- //
 
@@ -136,16 +136,14 @@ class Table {
         // -- Top-Left Cushion
         // Cushion shadows - TOP
         drawingContext.shadowBlur = 6;
-        drawingContext.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        drawingContext.shadowColor = 'rgba(26, 24, 24, 0.6)';
         drawingContext.shadowOffsetY = 2;
-
         quad(
             feltX + cushionOffset, this.y, // Top-Left
             this.x + this.width / 2 - diamConer + 14, this.y, // Top-Middle Left
             this.x + this.width / 2 - diamConer, feltY, // Bottom-Middle Left
             feltX + cushionOffset + 14, feltY // Bottom-Left
         )
-
         // -- Top-Right Cushion
         quad(
             this.x + this.width / 2 + diamSide -14, this.y, // Top-left
@@ -154,18 +152,15 @@ class Table {
             this.x + this.width / 2 + diamSide, feltY // Bottom-left
         )
 
-
         // -- Bottom-Left Cushion
         // Cushion shadows - BOTTOM
         drawingContext.shadowOffsetY = -2;
-
         quad(
             feltX + cushionOffset, this.y + this.height, // Bottom-Left
             this.x + this.width / 2 - diamConer + 14, this.y + this.height, // Bottom-Right
             this.x + this.width / 2 - diamConer, feltY + feltHeight, // Top-Right
             feltX + cushionOffset + 14, feltY + feltHeight // Top-Left
         )
-
         // -- Bottom-Right Cushion
         quad(
             this.x + this.width / 2 + diamSide -14, this.y + this.height, // Bottom-Left
@@ -176,7 +171,7 @@ class Table {
 
         // -- Left Cushion
         // Cushion shadows - LEFT
-        drawingContext.shadowOffsetX = 2;
+        drawingContext.shadowOffsetX = 1;
         drawingContext.shadowOffsetY = 0;
         quad(
             this.x, feltY + cushionOffset, // Top-Left
@@ -184,10 +179,9 @@ class Table {
             feltX, feltY + feltHeight - cushionOffset - 14, // Bottom-Right
             this.x, feltY + feltHeight - cushionOffset // Bottom-Left
         )
-
         // -- Right Cushion
         // Cushion shadows - RIGHT
-        drawingContext.shadowOffsetX = -2;
+        drawingContext.shadowOffsetX = -1;
         quad(
             this.x + this.width, feltY + cushionOffset, // Top-Left
             this.x + this.width - cushion_w, feltY + cushionOffset + 14, // Top-Right
@@ -195,14 +189,11 @@ class Table {
             this.x + this.width, feltY + feltHeight - cushion_w // Bottom-Left
         )
 
-
         // Turn off shadows
         drawingContext.shadowBlur = 0;
         drawingContext.shadowColor = 'rgba(0, 0, 0, 0)';
 
-
-
-
+        // ---- END CUSHION ---- //
 
 
 
@@ -260,7 +251,10 @@ class Table {
             circle(rightDot_x, dot_y, dotDiameter);
         }
 
+        // ---- END TABLE DOTS ---- //
+
         pop();
-    }
+
+    } // End of display method
 
 }

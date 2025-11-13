@@ -13,22 +13,26 @@ class Game {
         this.currentBreak = 0;
         this.highBreak = 0;
         this.BallOn = 'Red';
-        this.mode = null; // Game mode (Start, Red Random, Full Random)
+        this.gameMode = 1; // Standard mode by default
     }
 
     displayHeader() {
+        // Constants
         const HEADER_HEIGHT = 88;
         const PADDING = 96;
 
+        // Draw header background
         noStroke();
         fill('#132032');
         rect(0, 0, Game.CANVAS_WIDTH, HEADER_HEIGHT);
+
 
         // Display scores
         fill(210);
         textSize(22);
         textAlign(LEFT, CENTER);
         text(`Player Score: ${this.playerScore}`, PADDING, HEADER_HEIGHT / 2 + 8);
+
 
         // Display break
         text(`Current Break: ${this.currentBreak}  |  High Break: ${this.highBreak}`,
@@ -43,18 +47,83 @@ class Game {
         fill(217); // Highlight background
         rect( HighlightX, HighlightY, HighlightWidth, HighlightHeight, 40);
 
+
         // Display Ball On
         fill(0); // Dark text for contrast
         textAlign(CENTER, CENTER);
         text(`Ball On: ${this.BallOn}`, HighlightX + HighlightWidth / 2, HEADER_HEIGHT / 2 + 8);
-        
-
     }
 
-    setMode(mode) {
-        this.mode = mode;
-        console.log(`Game mode: ${this.mode}`);
+    setGameMode(newMode) {
+
+        if(newMode >= 1 && newMode <= 3) {
+            this.gameMode = newMode;
+            console.log(`Game mode set to: ${newMode}`);
+        } else {
+            console.warn(`Invalid game mode: ${newMode}`);
+        }
     }
 
+    displayGameMode() {
+        // Constants for positioning
+        const X_start = Game.CANVAS_WIDTH - 220; // X position for text
+        const Y_title = 146; // Y position for title
+        const Y_press = 170; // Y position for instructions
+        const Y_mode1 = 210; // Y position for mode 1
+        const Y_mode2 = 250; // Y position for mode 2
+        const Y_mode3 = 290; // Y position for mode 3
+
+        // Map mode numbers to their Y positions
+        const modeMap_Y = {
+            1: Y_mode1,
+            2: Y_mode2,
+            3: Y_mode3
+        };
+
+
+        // ---- Highlight for selected mode ---- //
+        const HighlightWidth = 140;
+        const HighlightHeight = 32;
+        const HighlightY = modeMap_Y[this.gameMode] - 9;
+
+        noStroke();
+        fill(217); // Highlight background
+        rect(X_start - 16, HighlightY, HighlightWidth, HighlightHeight, 20);
+        // ---- End Highlight ---- //
+
+
+        // ---- Display Mode Selection Text ---- //
+        fill(230);
+        textAlign(LEFT, TOP);
+
+        // Title
+        textSize(16);
+        textStyle(BOLD);
+        text("Game Mode", X_start, Y_title);
+
+        // Instructions
+        textSize(14);
+        textStyle(NORMAL);
+        text("Press:", X_start, Y_press);
+
+        // Mode Options
+        textSize(16);
+        const textOptions = [ 
+            {text: "1: Standard", y: Y_mode1, mode: 1 },
+            {text: "2: Red Random", y: Y_mode2, mode: 2 },
+            {text: "3: Full Random", y: Y_mode3, mode: 3 }
+        ];
+
+        for(let i = 0; i < textOptions.length; i++) {
+            if(this.gameMode === textOptions[i].mode) {
+                fill(0);
+        } else {
+                fill(230);
+            }
+            text(textOptions[i].text, X_start, textOptions[i].y);
+        }
+        // ---- End Display Mode Selection Text ---- //
+
+    }
 }
 // End of class Game

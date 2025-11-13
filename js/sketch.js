@@ -23,6 +23,7 @@ function setup() {
     snookerGame = new Game(); // New Game instance
     snookerTable = new Table(); // New Table instance
 
+
     // Run the engine
     Runner.run(engine);
 
@@ -34,32 +35,31 @@ function setup() {
 
 
 function draw() {
+    background('#27374d'); // Green felt background
 
     // Display header
     snookerGame.displayHeader();
+    // Display game mode info
+    snookerGame.displayGameMode();
+
     // Display table
     snookerTable.display();
-
-
-
-    //Placeholder for Mode selection
-    fill(255);
-    textSize(18);
-    textAlign(LEFT, TOP);
-    text("Press 1: Start Mode | Press 2: Red Random Mode | Press 3: Full Random Mode", 96, Game.CANVAS_HEIGHT - 48);
-
 
 }
 
 
 
 function keyPressed() {
+
+    if(!snookerGame) return;
+
+
     // Select game mode
     if (key === '1') {
-        snookerGame.setMode('Start');
+        snookerGame.setGameMode(1);
     } else if (key === '2') {
-        snookerGame.setMode('Red Random');
+        snookerGame.setGameMode(2);
     } else if (key === '3') {
-        snookerGame.setMode('Full Random');
+        snookerGame.setGameMode(3);
     }
 }
