@@ -8,15 +8,13 @@ class Table {
         this.x = Game.TABLE_X_OFFSET ; //350
         this.y = Game.TABLE_Y_OFFSET ; //201
 
-
-
     }
 
     display () {
         
         push();
-
-        const frame_w = 18; // Thickness of the frame
+        // ---- COMPONENTS ---- //
+        const woodFrame = 20; // Thickness of the frame
         const cushion_w = 10; // Width of the cushions
 
         // Calculate pocket dimensions based on table size
@@ -37,26 +35,45 @@ class Table {
         const feltWidth = this.width - cushion_w * 2;
         const feltHeight = this.height - cushion_w * 2;
 
+        //---- END COMPONENTS ---- //
 
 
         // ---- TABLE BOARD (wooden frame) ---- //
         noStroke();
         fill(123, 65, 20); // Brown color for the wooden frame
-        rect(this.x - frame_w, this.y - frame_w, 
-                this.width + frame_w * 2, this.height + frame_w * 2,
-                24);
+        rect(this.x - woodFrame, this.y - woodFrame, 
+                this.width + woodFrame * 2, this.height + woodFrame * 2,
+                10);
         // ---- END TABLE BOARD ---- //
 
 
 
         // ---- TABLE DETAILS (inlays) ---- //
-        const inlaySize = 6;
+        const inlaySize = 56;
         const inlayOffset = 18;
-        fill(200, 200, 200, 180);
+        fill(180); // color for inlays
 
         // Top-left inlay
-        rect(this.x - frame_w, this.y + inlayOffset, frame_w, inlaySize, 4);
-        rect(this.x + inlayOffset, this.y - frame_w, inlaySize, frame_w, 4);
+        rect(this.x - woodFrame, this.y - woodFrame, inlaySize, woodFrame, 32, 0, 0, 0);
+        rect(this.x - woodFrame, this.y - woodFrame, woodFrame, inlaySize, 32, 0, 0, 0);
+
+        // Top-right inlay
+        rect(this.x + this.width + woodFrame - inlaySize, this.y - woodFrame, inlaySize, woodFrame, 0, 32, 0, 0);
+        rect(this.x + this.width, this.y - woodFrame, woodFrame, inlaySize, 0, 32, 0, 0);
+
+        // Bottom-left inlay
+        rect(this.x - woodFrame, this.y + this.height, inlaySize, woodFrame, 0, 0, 0, 32);
+        rect(this.x - woodFrame, this.y + this.height + woodFrame - inlaySize, woodFrame, inlaySize, 0, 0, 0, 32);
+
+        // Bottom-right inlay
+        rect(this.x + this.width + woodFrame - inlaySize, this.y + this.height, inlaySize, woodFrame, 0, 0, 32, 0);
+        rect(this.x + this.width, this.y + this.height + woodFrame - inlaySize, woodFrame, inlaySize, 0, 0, 32, 0);
+
+        // Middle Top inlay
+        rect(this.x + (this.width - inlaySize) / 2, this.y - woodFrame, inlaySize, woodFrame);
+
+        // Middle Bottom inlay
+        rect(this.x + (this.width - inlaySize) / 2, this.y + this.height, inlaySize, woodFrame);
 
         // ---- End TABLE DETAILS ---- //
 
@@ -81,7 +98,7 @@ class Table {
         drawingContext.fillStyle = gradient; // Apply gradient to fill style
         
         // Felt surface
-        rect(feltX, feltY, feltWidth, feltHeight, 12);
+        rect(feltX - cushion_w, feltY - cushion_w, feltWidth + cushion_w * 2, feltHeight + cushion_w * 2, 12);
         fill(255); // Reset fill to white
         // ---- END FELT ---- //
 
@@ -111,17 +128,17 @@ class Table {
 
 
         // ---- CUSHION (the light green part) ---- //
-        // Cushion shadows
-        drawingContext.shadowBlur = 10;
-        drawingContext.shadowColor = 'rgba(0, 0, 0, 0.6)';
-        drawingContext.shadowOffsetX = 0;
-        drawingContext.shadowOffsetY = 0;
 
         // Draw the 6 Cushions 
         noStroke();
         fill(73, 154, 12); // Lighter green for cushions
 
         // -- Top-Left Cushion
+        // Cushion shadows - TOP
+        drawingContext.shadowBlur = 6;
+        drawingContext.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        drawingContext.shadowOffsetY = 2;
+
         quad(
             feltX + cushionOffset, this.y, // Top-Left
             this.x + this.width / 2 - diamConer + 14, this.y, // Top-Middle Left
@@ -137,7 +154,11 @@ class Table {
             this.x + this.width / 2 + diamSide, feltY // Bottom-left
         )
 
+
         // -- Bottom-Left Cushion
+        // Cushion shadows - BOTTOM
+        drawingContext.shadowOffsetY = -2;
+
         quad(
             feltX + cushionOffset, this.y + this.height, // Bottom-Left
             this.x + this.width / 2 - diamConer + 14, this.y + this.height, // Bottom-Right
@@ -154,6 +175,9 @@ class Table {
         )
 
         // -- Left Cushion
+        // Cushion shadows - LEFT
+        drawingContext.shadowOffsetX = 2;
+        drawingContext.shadowOffsetY = 0;
         quad(
             this.x, feltY + cushionOffset, // Top-Left
             feltX, feltY + cushionOffset + 14, // Top-Right
@@ -162,6 +186,8 @@ class Table {
         )
 
         // -- Right Cushion
+        // Cushion shadows - RIGHT
+        drawingContext.shadowOffsetX = -2;
         quad(
             this.x + this.width, feltY + cushionOffset, // Top-Left
             this.x + this.width - cushion_w, feltY + cushionOffset + 14, // Top-Right
@@ -194,18 +220,22 @@ class Table {
         ellipse(this.x + this.width / 2, this.y + OffSet, diamSide, diamSide); // Top-Center
         ellipse(this.x + this.width / 2, this.y + this.height - OffSet, diamSide, diamSide); // Bottom-Center
 
-        // Silver dots on the table
+        // ---- END POCKETS ---- //
+
+
+
+        // ---- TABLE DOTS (silver markers) ---- //
         const dotRadius = 2.7;
         const dotDiameter = dotRadius * 2;
 
         // Dots positions
-        const topDot_y = this.y - frame_w / 2;
-        const bottomDot_y = this.y + this.height + frame_w / 2;
-        const leftDot_x = this.x - frame_w / 2;
-        const rightDot_x = this.x + this.width + frame_w / 2;
+        const topDot_y = this.y - woodFrame / 2;
+        const bottomDot_y = this.y + this.height + woodFrame / 2;
+        const leftDot_x = this.x - woodFrame / 2;
+        const rightDot_x = this.x + this.width + woodFrame / 2;
 
         noStroke();
-        fill(222, 222, 222, 140); // Silver color for dots
+        fill(180); // Silver color for dots
 
         // Draw dots
         const numDots = 6;
