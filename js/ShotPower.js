@@ -53,6 +53,24 @@ class ShotPower {
         // ---- Cue Illustration ----
         this.drawCueIllustration();
 
+
+        // --- Percentage Text ---
+        if(this.isDragging && this.shotPower > 0.04) {
+            // Calculate fill height based on shotPower
+            let labelY = this.yPos - this.shotPower - 10;
+
+            // Prevent text from going above the bar
+            let powerPercent = this.shotPower * 100;
+            let labelText = round(powerPercent) + '%';
+
+            // Draw text
+            fill(230);
+            textSize(16);
+            textAlign(CENTER, BOTTOM);
+            text(labelText, this.xPos + this.width / 2, labelY);
+        }
+        // ---- END Percentage Text ----
+
         pop();
 
     }
@@ -125,12 +143,12 @@ class ShotPower {
             currentx += dashLength + spaceLength;
             }
 
-            // -- Label 25%, 50%, 75%, 100%
-            noStroke();
-            fill(230)
-            textAlign(LEFT, CENTER);
-            textSize(14);
-            text(indicator.label, this.xPos + this.width + textOffset, indicator_y);
+            // // -- Label 25%, 50%, 75%, 100%
+            // noStroke();
+            // fill(230)
+            // textAlign(LEFT, CENTER);
+            // textSize(12);
+            // text(indicator.label, this.xPos + this.width + textOffset, indicator_y);
         }
 
 
