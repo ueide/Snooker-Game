@@ -67,11 +67,12 @@ class Game {
     displayGameMode() {
         // Constants for positioning
         const X_start = Game.CANVAS_WIDTH - 220; // X position for text
-        const Y_title = 146; // Y position for title
-        const Y_press = 170; // Y position for instructions
-        const Y_mode1 = 210; // Y position for mode 1
-        const Y_mode2 = 250; // Y position for mode 2
-        const Y_mode3 = 290; // Y position for mode 3
+        const y_position = 188;
+        const Y_title = y_position; // Y position for title
+        const Y_press = y_position + 24; // Y position for instructions
+        const Y_mode1 = y_position + 64; // Y position for mode 1
+        const Y_mode2 = y_position + 104; // Y position for mode 2
+        const Y_mode3 = y_position + 144; // Y position for mode 3
 
         // Map mode numbers to their Y positions
         const modeMap_Y = {
@@ -104,7 +105,7 @@ class Game {
         // Instructions
         textSize(14);
         textStyle(NORMAL);
-        text("Press:", X_start, Y_press);
+        text("Press a key:", X_start, Y_press);
 
         // Mode Options
         textSize(16);

@@ -9,7 +9,7 @@ var Engine = Matter.Engine,
 let snookerGame;
 let snookerTable;
 let poolCue;
-
+let shotPower;
 
 function setup() {
     createCanvas(Game.CANVAS_WIDTH, Game.CANVAS_HEIGHT);
@@ -24,6 +24,7 @@ function setup() {
     snookerGame = new Game(); // Game instance
     snookerTable = new Table(); // Table instance
     poolCue = new PoolCue(); // PoolCue instance
+    shotPower = new ShotPower(); // ShotPower instance
 
 
     // Run the engine
@@ -50,15 +51,17 @@ function draw() {
     // Display pool cue
     poolCue.display(mouseX, mouseY);
 
-}
+    // Display shot power
+    shotPower.display();
 
+}
 
 
 function keyPressed() {
 
     if(!snookerGame) return;
 
-
+    // ---- Mode Game Selection ---- //
     // Select game mode
     if (key === '1') {
         snookerGame.setGameMode(1);
@@ -67,11 +70,14 @@ function keyPressed() {
     } else if (key === '3') {
         snookerGame.setGameMode(3);
     }
+    // ---- END Mode Game Selection ---- //
+
 }
 
 
 function mousePressed() {
 
+    // ---- Pool Cue Interaction (lock/unlock) ---- //
     if(!poolCue) return;
 
     if(!poolCue.isLocked) {
@@ -86,12 +92,45 @@ function mousePressed() {
 
         console.log(`Cue locked at position: (${mouseX}, ${mouseY}) with angle: ${poolCue.lockAngle}`);
     }
+    // ---- END Pool Cue Interaction ---- //
+
+
+    // ---- Shot Power Interaction ---- //
+    if(shotPower.isMouseOver()) {
+        shotPower.startDragging(mouseY);
+        console.log("Started dragging shot power.");
+    }
+    // ---- END Shot Power Interaction ---- //
     
 }
+
 
 function doubleClicked() {
     if(poolCue && poolCue.isLocked) {
         poolCue.isLocked = false;
         console.log("Cue unlocked.");
     }
+}
+
+
+function mouseDragged() {
+
+    // ---- Shot Power Dragging ---- //
+    if(shotPower.isDragging) {
+        shotPower.updateDrag(mouseY);
+    }
+    // ---- END Shot Power Dragging ---- //
+
+}
+
+
+function mouseReleased() {
+
+    // ---- Shot Power Release ---- //
+    if(shotPower && shotPower.isDragging) {
+        shotPower.endDrag();
+        console.log("Shot power set to.");
+    }
+    // ---- END Shot Power Release ---- //
+
 }
