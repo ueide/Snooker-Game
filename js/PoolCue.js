@@ -19,7 +19,10 @@ class PoolCue {
         this.bodyStartThickness = 8; // Thickness at the start of the body
         this.bodyEndThickness = 5; // Thickness at the end of the body
 
+        // Shot power properties
+        this.shotDistance = 0; // Distance for shot power calculation
 
+        // Cue lock properties
         this.isLocked = false; // Is the cue locked to a position
         this.lockPositionX = 0; // X position when locked
         this.lockPositionY = 0; // Y position when locked
@@ -27,29 +30,35 @@ class PoolCue {
     }
 
 
-    display(targetX, targetY) {
-        
-        let cueX, cueY;
+    display(cueBallX, cueBallY, mouseX, mouseY) {
         let angle;
+        let cueX = cueBallX
+        let cueY = cueBallY;        
 
         // Determine cue position
         if(this.isLocked) {
-            cueX = this.lockPositionX;
-            cueY = this.lockPositionY;
-            angle = this.lockAngle; // Use locked angle
+            // Use locked position
+            angle = this.lockAngle;
+
+            // Calculate cue position based on locked angle and shot distance
+            cueX = cueBallX - cos(angle) * (this.shotDistance +8);
+            cueY = cueBallY - sin(angle) * (this.shotDistance +8);
+            
+            this.lockAngle = angle;// Update lock angle in case of shot distance change
+
         } else {
-            cueX = targetX;
-            cueY = targetY;
-            angle = atan2(cueY - 700/2, cueX - 1440/2);
+            // Unlocked position -> follows mouse
+            angle = atan2(mouseY - cueBallY, mouseX - cueBallX);
+
+            // Calculate cue position based on current mouse position and shot distance
+            cueX = cueBallX - cos(angle) * 8;
+            cueY = cueBallY - sin(angle) * 8;
 
         }
 
 
 
-        // ---- Calculate angle towards target ----//
-
-
-        // ---- Draw the cue ---- //
+        // ---- Draw the Pool cue ---- //
         push();
         translate(cueX, cueY); // Move to cue position
         rotate(angle); // Rotate towards target
@@ -63,13 +72,13 @@ class PoolCue {
 
         noStroke();
 
-        // -- Cue Base (brown part )-- //
+        // -- PoolCue Base (brown part )-- //
         fill(102, 51, 0); // Brown color
         rect(X_baseEnd, -this.baseThickness / 2, this.baseLength, this.baseThickness, 4, 0, 0, 4);
-        // -- End Cue Base -- //
+        // -- End PoolCue Base -- //
 
 
-        // -- Cue Body (Silver part) -- //
+        // -- PoolCue Body (Silver part) -- //
         fill(200);
         quad(
             X_bodyStart, - this.bodyEndThickness / 2,
@@ -77,10 +86,10 @@ class PoolCue {
             X_baseStart, this.bodyStartThickness / 2,
             X_baseStart, - this.bodyStartThickness / 2
         );
-        // -- End Cue Body -- //
+        // -- End PoolCue Body -- //
 
 
-        // -- Cue Tip and line (end part) -- //
+        // -- PoolCue Tip and line (end part) -- //
 
         //line near tip
         stroke(10);
@@ -95,7 +104,7 @@ class PoolCue {
             this.tipThickness * 2, -HALF_PI, HALF_PI
         );
 
-        // -- End Cue Tip and line -- //
+        // -- End PoolCue Tip and line -- //
 
         pop();
     }

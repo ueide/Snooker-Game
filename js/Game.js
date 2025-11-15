@@ -14,6 +14,8 @@ class Game {
         this.highBreak = 0;
         this.BallOn = 'Red';
         this.gameMode = 1; // Standard mode by default
+
+        this.isCueBallPlacementMode = true; // Start in cue ball placement mode
     }
 
     displayHeader() {

@@ -225,6 +225,10 @@ class ShotPower {
             let powerFraction = constrain(dragDistance / this.maxDragDistance, 0, 1);
 
             this.shotPower = powerFraction;
+
+            if(poolCue) {
+                poolCue.shotDistance = this.shotPower * 50;
+            }
         }
 
     }
@@ -233,6 +237,10 @@ class ShotPower {
     endDrag() {
         this.isDragging = false;
         this.shotPower = 0; // Reset shot power after the shot
+
+        if(poolCue) {
+            poolCue.shotDistance = 0;
+        }
     }
 
 }

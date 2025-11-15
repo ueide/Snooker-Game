@@ -12,6 +12,7 @@ class Table {
         this.ballDiameter = this.width / 36; // 740/36 = ~20.55
         this.pocketDiameter = this.ballDiameter * 1.5; // ~30.83
         this.pocketRadius = this.pocketDiameter / 2;
+        this.pocket_OffSet = this.pocketRadius / 2;
 
         // Frame and cushion dimensions
         this.woodFrameThickness = 20;
@@ -22,13 +23,12 @@ class Table {
         this.feltY = this.y + this.cushionWidth;
         this.feltWidth = this.width - this.cushionWidth * 2;
         this.feltHeight = this.height - this.cushionWidth * 2;
+        this.feltC_x = this.feltX + this.feltWidth / 2;
+        this.feltC_y = this.feltY + this.feltHeight / 2;
 
         // Baulk line and D zone properties
         this.baulkLineX = this.feltX + this.feltWidth * 0.20 ; // X position
         this.D_Radius = 64; // Radius of the D
-
-        // Pocket Positions
-        this.pocket_OffSet = this.pocketRadius / 2;
 
         // Inlay (Dots) Dimensions
         this.inlay_size = 56;
@@ -43,12 +43,13 @@ class Table {
         noStroke();
 
         // ---- CONSTANTS ---- //
-        const pk_R = this.pocketRadius;
-        const pk_OS = this.pocket_OffSet;
         const wd_f = this.woodFrameThickness;
+        const pk_R = this.pocketRadius;
+        const pk_diam = this.pocketDiameter;
+        const pk_OS = this.pocket_OffSet;
         const cu_w = this.cushionWidth;
-        const feltC_x = this.feltX + this.feltWidth / 2;
-        const feltC_y = this.feltY + this.feltHeight / 2;
+        const inlaySize = this.inlay_size;
+
         //---- END CONSTANTS ---- //
 
 
@@ -60,9 +61,7 @@ class Table {
         // ---- END TABLE BOARD ---- //
 
 
-
         // ---- TABLE DETAILS (inlays) ---- //
-        const inlaySize = this.inlay_size;
         fill(180); // color for inlays
 
         // Top-left inlay
@@ -96,8 +95,8 @@ class Table {
 
         //Gradient for the felt
         const gradient = drawingContext.createRadialGradient(
-            feltC_x, feltC_y, 50, // x0, y0, r0
-            feltC_x, feltC_y, feltRadius // x1, y1, r1
+            this.feltC_x, this.feltC_y, 50, // x0, y0, r0
+            this.feltC_x, this.feltC_y, feltRadius // x1, y1, r1
             );
         
         // Define gradient color stops
@@ -113,17 +112,19 @@ class Table {
 
 
 
-        // ---- TABLE MARKINGS (white lines) ---- //
+        // ---- D-ZONE AND BAULK LIEN (white lines) ---- //
         stroke(200, 180); // Light gray // color and transparency
         strokeWeight(2);
+        noFill();
+
         // Baulk Line
         line(this.baulkLineX, this.feltY, this.baulkLineX, this.feltY + this.feltHeight);
 
         // D Zone
-        noFill();
+        const D_centerY = this.feltC_y;
         arc(
             this.baulkLineX,
-            feltC_y,
+            D_centerY,
             this.D_Radius * 2,
             this.D_Radius * 2,
             HALF_PI, -HALF_PI // From 90 degrees to -90 degrees
@@ -208,7 +209,6 @@ class Table {
 
         // ---- POCKETS (black holes) ---- //
         fill(18); // Black color for pockets
-        const pk_diam = this.pocketDiameter;
 
         // Corner Pockets
         ellipse(this.x + pk_OS, this.y + pk_OS, pk_diam, pk_diam); // Top-Left Corner
@@ -260,4 +260,26 @@ class Table {
         pop();
     } // End of display method
 
+
+
+    // Check if a point (x, y) with a given ballRadius is inside the D zone
+    isInsideDZone(x, y, ballRadius) { //
+        const D_centerY = this.feltC_y;
+        const D_Radius = this.D_Radius;
+        const baulkLineX = this.baulkLineX;
+
+        // Calculate distance from point (x, y) to the center of the D
+        const distanceToDCenter = dist(x, y, baulkLineX, D_centerY);
+
+        if(distanceToDCenter > D_Radius - ballRadius) {
+            return false; // Outside D zone
+        } else if (x + ballRadius > baulkLineX) {
+            return false; // Outside D zone
+        }
+
+        return true; // Inside D zone
+    }
+
 }
+
+

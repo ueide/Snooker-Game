@@ -11,6 +11,7 @@ let snookerGame;
 let snookerTable;
 let poolCue;
 let shotPower;
+let snookerBalls;
 
 function setup() {
     createCanvas(Game.CANVAS_WIDTH, Game.CANVAS_HEIGHT);
@@ -26,6 +27,7 @@ function setup() {
     snookerTable = new Table(); // Table instance
     poolCue = new PoolCue(); // PoolCue instance
     shotPower = new ShotPower(); // ShotPower instance
+    snookerBalls = new Balls(snookerTable);
 
 
     // Run the engine
@@ -43,19 +45,53 @@ function draw() {
 
     // Display header
     snookerGame.displayHeader();
+
     // Display game mode info
     snookerGame.displayGameMode();
 
-    // Display table
+
+    // Display table and balls
     snookerTable.display();
+    snookerBalls.display();
 
-    // Display pool cue
-    poolCue.display(mouseX, mouseY);
 
-    // Display shot power
-    shotPower.display();
+    // ---- Cue Ball Placement Logic ---- //
+    if(snookerGame.isCueBallPlacementMode && !snookerBalls.isCueBallPlaced) {
+        const r = snookerBalls.ballRadius;
+        const mouseOverFelt = 
+            mouseX > snookerTable.feltX && mouseX < snookerTable.feltX + snookerTable.feltWidth &&
+            mouseY > snookerTable.feltY && mouseY < snookerTable.feltY + snookerTable.feltHeight;
 
-}
+        if(mouseOverFelt) {
+            // Draw cue ball at mouse position
+            snookerBalls.displayCueBallHand();
+            noCursor(); // Hide cursor for better visibility
+        } else {
+            cursor(ARROW); // Show cursor
+        }
+
+    return; // Skip the rest of draw loop
+
+    } // ---- End cue ball placement logic
+
+
+
+    // Display pool cue and shot power only if cue ball is placed
+    if(snookerBalls.cueBall) {
+        const cueBallPos = snookerBalls.cueBall.body.position;
+
+        // Display pool cue
+        poolCue.display(cueBallPos.x, cueBallPos.y, mouseX, mouseY);
+        // Display shot power
+        shotPower.display();
+    }
+
+
+    // Show cursor normally
+    cursor(ARROW);
+
+
+} // End draw function
 
 
 function keyPressed() {
@@ -65,11 +101,19 @@ function keyPressed() {
     // ---- Mode Game Selection ---- //
     // Select game mode
     if (key === '1') {
-        snookerGame.setGameMode(1);
-    } else if (key === '2') {
-        snookerGame.setGameMode(2);
-    } else if (key === '3') {
-        snookerGame.setGameMode(3);
+        snookerGame.setGameMode(1); // UI mode
+        snookerBalls.initializeBalls(1); // Initialize balls for mode 1
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    } 
+    else if (key === '2') {
+        snookerGame.setGameMode(2); // UI mode
+        snookerBalls.initializeBalls(2); // Initialize balls for mode 2
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    } 
+    else if (key === '3') {
+        snookerGame.setGameMode(3); // UI mode
+        snookerBalls.initializeBalls(3); // Initialize balls for mode 3
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
     }
     // ---- END Mode Game Selection ---- //
 
@@ -78,22 +122,52 @@ function keyPressed() {
 
 function mousePressed() {
 
+    // ---- Cue Ball Placement ---- //
+    if(snookerGame.isCueBallPlacementMode && !snookerBalls.isCueBallPlaced) {
+        const r = snookerBalls.ballRadius;
+        const isValidPosition = snookerTable.isInsideDZone(mouseX, mouseY, r);
+
+        let isOverLapping = false; // Check for overlap with existing balls
+        // Check overlap with existing balls
+        for(let ball of snookerBalls.allBalls) {
+            const d = dist(mouseX, mouseY, ball.body.position.x, ball.body.position.y);
+            if(d < (r * 2)) {
+                isOverLapping = true;
+                break;
+            }
+        }
+
+        if(isValidPosition && !isOverLapping) {
+            snookerBalls.placeCueBall(mouseX, mouseY);
+            snookerGame.isCueBallPlacementMode = false; // Exit cue ball placement mode
+            poolCue.isLocked = false; // Reset cue lock state
+
+            console.log(`Cue ball placed at: (${mouseX}, ${mouseY})`);
+            return;
+        } else {
+            console.log("Invalid cue ball position. Please place within the D-zone and avoid overlapping other balls.");
+            return;
+        }
+    }
+
+
+
     // ---- Pool Cue Interaction (lock/unlock) ---- //
-    if(!poolCue) return;
+    if(!poolCue || !snookerBalls.cueBall) return;
 
     if(!poolCue.isLocked) {
-        const areaX = Game.CANVAS_WIDTH/2;
-        const areaY = Game.CANVAS_HEIGHT/2;
+        const cueBallPos = snookerBalls.cueBall.body.position;
 
         poolCue.isLocked = true;
-        poolCue.lockPositionX = mouseX;
-        poolCue.lockPositionY = mouseY;
+        poolCue.lockPositionX = cueBallPos.x;
+        poolCue.lockPositionY = cueBallPos.y;
 
-        poolCue.lockAngle = atan2(mouseY - areaY, mouseX - areaX);
+        poolCue.lockAngle = atan2(mouseY - cueBallPos.y, mouseX - cueBallPos.x);
 
         console.log(`Cue locked at position: (${mouseX}, ${mouseY}) with angle: ${poolCue.lockAngle}`);
     }
     // ---- END Pool Cue Interaction ---- //
+
 
 
     // ---- Shot Power Interaction ---- //
@@ -102,8 +176,8 @@ function mousePressed() {
         console.log("Started dragging shot power.");
     }
     // ---- END Shot Power Interaction ---- //
-    
-}
+
+} // End mousePressed function
 
 
 function doubleClicked() {
