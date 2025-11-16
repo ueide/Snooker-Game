@@ -246,7 +246,7 @@ class ShotPower {
         }
 
         // ---- SHOT PHYSICS ----
-        const MaxSpeed = 24; // Maximum force applied to the cue ball
+        const MaxSpeed = 18; // Maximum force applied to the cue ball
         const speed = this.shotPower * MaxSpeed; // Scale shot power to speed
         const angle = poolCue.lockAngle; // Use the locked angle of the cue
         const velocityX = Math.cos(angle) * speed; 

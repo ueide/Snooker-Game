@@ -14,13 +14,13 @@ class Balls {
 
         // Define the properties for each type of ball
         this.balls_prop = {
-            CUE: { name: 'White', value: 0, rgb: [255, 255, 255] },
-            RED: { name: 'Red', value: 1, rgb: [255, 0, 0] },
-            YELLOW: { name: 'Yellow', value: 2, rgb: [255, 255, 0] },
-            GREEN: { name: 'Green', value: 3, rgb: [0, 255, 0] },
-            BROWN: { name: 'Brown', value: 4, rgb: [165, 42, 42] },
-            BLUE: { name: 'Blue', value: 5, rgb: [0, 0, 255] },
-            PINK: { name: 'Pink', value: 6, rgb: [255, 192, 203] },
+            CUE: { name: 'White', value: 0, rgb: [255, 255, 240] },
+            RED: { name: 'Red', value: 1, rgb: [235, 0, 7] },
+            YELLOW: { name: 'Yellow', value: 2, rgb: [235, 219, 6] },
+            GREEN: { name: 'Green', value: 3, rgb: [65, 226, 6] },
+            BROWN: { name: 'Brown', value: 4, rgb: [88, 57, 39] },
+            BLUE: { name: 'Blue', value: 5, rgb: [0, 20, 219] },
+            PINK: { name: 'Pink', value: 6, rgb: [222, 120, 204] },
             BLACK: { name: 'Black', value: 7, rgb: [10, 10, 10] },
 
             //Ball On: Displayed in header

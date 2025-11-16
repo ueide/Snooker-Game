@@ -15,7 +15,7 @@ class Table {
         this.pocket_OffSet = this.pocketRadius / 2;
 
         // Frame and cushion dimensions
-        this.woodFrameThickness = 20;
+        this.woodFrameThickness = 24;
         this.cushionWidth = 10;
 
         // Felt - playing surface dimensions
@@ -40,11 +40,11 @@ class Table {
         // Pocket positions for reference
         this.pockets = [
             { x: this.x + this.pocket_OffSet, y: this.y + this.pocket_OffSet, name: 'TL' }, // Top-Left
-            { x: this.x + this.width / 2, y: this.y + this.pocket_OffSet, name: 'TC' }, // Top-Center
+            { x: this.x + this.width / 2, y: this.y + this.pocket_OffSet - 10, name: 'TC' }, // Top-Center
             { x: this.x + this.width - this.pocket_OffSet, y: this.y + this.pocket_OffSet, name: 'TR' }, // Top-Right
 
             { x: this.x + this.pocket_OffSet, y: this.y + this.height - this.pocket_OffSet, name:'BL' }, // Bottom-Left
-            { x: this.x + this.width / 2, y: this.y + this.height - this.pocket_OffSet, name: 'BC'}, // Bottom-Center
+            { x: this.x + this.width / 2, y: this.y + this.height - this.pocket_OffSet + 10, name: 'BC'}, // Bottom-Center
             { x: this.x + this.width - this.pocket_OffSet, y: this.y + this.height - this.pocket_OffSet, name: 'BR' } // Bottom-Right
         ];
 
@@ -52,16 +52,15 @@ class Table {
 
 
     physicalCushion() {
-        // Create physical cushions using Matter.js
-        const cushion_w_phy = 10; // Physical cushion width
-        const PktD = this.pocketDiameter;
-        const FeltX = this.feltX;
-        const FeltY = this.feltY;
-        const FeltW = this.feltWidth;
-        const FeltH = this.feltHeight;
+        //The physical cushions are created as Matter.js bodies for collision detection
+        // I used the fromVertices method to create custom shapes for the cushions
+        // keep the same dimensions as the visual cushions drawn in the display() method
 
-        const GapC = PktD + 1.6; // Corner Gap
-        const GapS = PktD * 0.9 // Side Gap
+        // Create physical cushions using Matter.js
+        const pk_R = this.pocketRadius;
+        const cushionOffset = 8;
+        const cornerGap = pk_R * 2 + cushionOffset;
+        const sideGap = pk_R * 2; // Gap for side cushions
 
         const cushionsSett = {
             isStatic: true,
@@ -72,39 +71,79 @@ class Table {
 
         let cushions = []; // Array to hold cushion bodies
 
-        // --- TOP CUSHIONS --- //
-        const TopLength = (FeltW - (2 * GapC)) / 2; // Length of top cushions
-        const YPos = FeltY - (cushion_w_phy / 2); //Cushion Y Position
-        // Top-Left Cushion
-        const TopLeftX = FeltX + GapC + (TopLength / 2);
-        cushions.push(Matter.Bodies.rectangle(TopLeftX, YPos, TopLength, cushion_w_phy, cushionsSett));
-        // Top-Right Cushion
-        const TopRightX = FeltX + FeltW - GapC - (TopLength / 2);
-        cushions.push(Matter.Bodies.rectangle(TopRightX, YPos, TopLength, cushion_w_phy, cushionsSett));
+        // --- TOP LEFT CUSHIONS --- //
+        let verticesTopLeft = [
+            {x: this.feltX + 8, y: this.y}, // Top-Left
+            {x: this.x + this.width / 2 - sideGap + 20, y: this.y}, // Top-Right
+            {x: this.x + this.width / 2 - sideGap + 2, y: this.feltY}, // Bottom-Right
+            {x: this.feltX + cornerGap - 12, y: this.feltY} // Bottom-Left
+        ];
+        let centerTopLeft = Matter.Vertices.centre(verticesTopLeft);
+        cushions.push(Matter.Bodies.fromVertices(centerTopLeft.x, centerTopLeft.y, [verticesTopLeft], cushionsSett));
 
-        // --- BOTTOM CUSHIONS --- //
-        const BottomYPos = FeltY + FeltH + (cushion_w_phy / 2); // Cushion Y Position
-        // Bottom-Left Cushion
-        cushions.push(Matter.Bodies.rectangle(TopLeftX, BottomYPos, TopLength, cushion_w_phy, cushionsSett));
-        // Bottom-Right Cushion
-        cushions.push(Matter.Bodies.rectangle(TopRightX, BottomYPos, TopLength, cushion_w_phy, cushionsSett));
 
-        // --- LEFT CUSHION --- //
-        const SideLength = FeltH - (2 * GapC); // Length of side cushions
-        const XPosLeft = FeltX - (cushion_w_phy / 2); // Cushion X Position
-        const XPosRight = FeltX + FeltW + (cushion_w_phy / 2); // Cushion X Position
-        const YPosCenter = FeltY + (FeltH / 2);
-        // Left Cushion
-        cushions.push(Matter.Bodies.rectangle(XPosLeft, YPosCenter, cushion_w_phy, SideLength, cushionsSett));
+        // --- TOP RIGHT CUSHIONS --- //
+        let verticesTopRight = [
+            {x: this.x + this.width / 2 + sideGap - 16, y: this.y}, // Top-Left
+            {x: this.x + this.width - cornerGap + 20, y: this.y}, // Top-Right
+            {x: this.x + this.width - cornerGap + 2, y: this.feltY}, // Bottom-Right
+            {x: this.x + this.width / 2 + sideGap, y: this.feltY} // Bottom-Left
+        ];
+        let centerTopRight = Matter.Vertices.centre(verticesTopRight);
+        cushions.push(Matter.Bodies.fromVertices(centerTopRight.x, centerTopRight.y, [verticesTopRight], cushionsSett));
 
-        // --- RIGHT CUSHION --- //
-        cushions.push(Matter.Bodies.rectangle(XPosRight, YPosCenter, cushion_w_phy, SideLength, cushionsSett));
+
+        // --- BOTTOM LEFT CUSHIONS --- //
+        let verticesBottomLeft = [
+            {x: this.feltX + 8, y: this.y + this.height}, // Bottom-Left
+            {x: this.x + this.width / 2 - sideGap + 20, y: this.y + this.height}, // Bottom-Right
+            {x: this.x + this.width / 2 - sideGap, y: this.feltY + this.feltHeight}, // Top-Right
+            {x: this.feltX + cornerGap - 10, y: this.feltY + this.feltHeight} // Top-Left
+        ];
+        let centerBottomLeft = Matter.Vertices.centre(verticesBottomLeft);
+        cushions.push(Matter.Bodies.fromVertices(centerBottomLeft.x, centerBottomLeft.y, [verticesBottomLeft], cushionsSett));
+
+
+        // --- BOTTOM RIGHT CUSHIONS --- //
+        let verticesBottomRight = [
+            {x: this.x + this.width / 2 + sideGap - 20, y: this.y + this.height}, // Bottom-Left
+            {x: this.x + this.width - cornerGap + 20, y: this.y + this.height}, // Bottom-Right
+            {x: this.x + this.width - cornerGap - 2, y: this.feltY + this.feltHeight}, // Top-Right
+            {x: this.x + this.width / 2 + sideGap, y: this.feltY + this.feltHeight} // Top-Left
+        ];
+        let centerBottomRight = Matter.Vertices.centre(verticesBottomRight);
+        cushions.push(Matter.Bodies.fromVertices(centerBottomRight.x, centerBottomRight.y, [verticesBottomRight], cushionsSett));
+
+
+        // --- LEFT CUSHIONS --- //
+        let verticesLeft = [
+            {x: this.x, y: this.feltY + cornerGap - 30}, // Top-Left
+            {x: this.feltX, y: this.feltY + cornerGap - 12}, // Top-Right
+            {x: this.feltX, y: this.feltY + this.feltHeight - cornerGap + 12}, // Bottom-Right
+            {x: this.x, y: this.feltY + this.feltHeight - cornerGap + 30} // Bottom-Left
+        ];
+        let centerLeft = Matter.Vertices.centre(verticesLeft);
+        cushions.push(Matter.Bodies.fromVertices(centerLeft.x, centerLeft.y, [verticesLeft], cushionsSett));
+
+
+        // --- RIGHT CUSHIONS --- //
+        let verticesRight = [
+            {x: this.x + this.width, y: this.feltY + cornerGap - 26}, // Top-Right
+            {x: this.x + this.width - this.cushionWidth, y: this.feltY + cornerGap - 12}, // Top-Left
+            {x: this.x + this.width - this.cushionWidth, y: this.feltY + this.feltHeight - cornerGap + 12}, // Bottom-Left
+            {x: this.x + this.width, y: this.feltY + this.feltHeight - cornerGap + 30} // Bottom-Right
+        ];
+        let centerRight = Matter.Vertices.centre(verticesRight);
+        cushions.push(Matter.Bodies.fromVertices(centerRight.x, centerRight.y, [verticesRight], cushionsSett));
+
 
         // Add all cushions to the Matter.js world
         Matter.World.add(engine.world, cushions);
         
 
     }
+
+
 
     display () {
         
@@ -220,8 +259,8 @@ class Table {
 
         quad(
             this.feltX + 10, this.y, // Top-Left
-            this.x + this.width / 2 - sideGap + 18, this.y, // Top-Middle Left
-            this.x + this.width / 2 - sideGap + 2, this.feltY, // Bottom-Middle Left
+            this.x + this.width / 2 - sideGap + 18, this.y, // Top-Right
+            this.x + this.width / 2 - sideGap + 2, this.feltY, // Bottom-Right
             this.feltX + cornerGap - 12, this.feltY // Bottom-Left
         )
         // -- Top-Right Cushion
@@ -263,10 +302,10 @@ class Table {
         // Cushion shadows - RIGHT
         drawingContext.shadowOffsetX = -1;
         quad(
-            this.x + this.width, this.feltY + cornerGap - 28 , // Top-Left
-            this.x + this.width - cu_w, this.feltY + cornerGap - 12, // Top-Right
-            this.x + this.width - cu_w, this.feltY + this.feltHeight - cornerGap + 12, // Bottom-Right
-            this.x + this.width, this.feltY + this.feltHeight - cornerGap + 28// Bottom-Left
+            this.x + this.width, this.feltY + cornerGap - 28 , // Top-Right
+            this.x + this.width - cu_w, this.feltY + cornerGap - 12, // Top-Left
+            this.x + this.width - cu_w, this.feltY + this.feltHeight - cornerGap + 12, // Bottom-Left
+            this.x + this.width, this.feltY + this.feltHeight - cornerGap + 28// Bottom-Right
         )
 
         // Turn off shadows
@@ -344,7 +383,7 @@ class Table {
     isBallInPocket(ball) {
         // Check if the ball is in any pocket
         const ballPos = ball.body.position;
-        const pocketDectRadius = this.pocketRadius * 1.5; // Detection radius
+        const pocketDectRadius = this.pocketRadius * 1.2; // Detection radius
 
         for(let pocket of this.pockets) {
             // Calculate distance between ball and pocket
