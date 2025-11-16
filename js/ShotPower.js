@@ -257,17 +257,13 @@ class ShotPower {
         poolCue.shotDistance = 0; // Reset shot distance after the shot
         poolCue.isLocked = false; // Unlock the cue after the shot
 
+        snookerGame.isShotTaken = true; // Mark that a shot has been taken
+
         console.log(`Shot taken with power: ${this.shotPower.toFixed(2)} (Speed: ${speed.toFixed(2)}) at angle: ${degrees(angle).toFixed(2)}°`);
 
+        this.shotPower = 0; // Reset shot power after the shot
         //--- END SHOT PHYSICS ----
 
-
-        //this.isDragging = false;
-        this.shotPower = 0; // Reset shot power after the shot
-
-        if(poolCue) {
-            poolCue.shotDistance = 0;
-        }
     }
 
 }

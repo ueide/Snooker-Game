@@ -18,11 +18,15 @@ class Game {
         this.gameMode = 1; // Standard mode by default
 
         this.isCueBallPlacementMode = true; // Start in cue ball placement mode
+        this.isShotTaken = false; // Track if a shot has been taken
 
         this.pottedReds = 0; // Track number of potted reds
         this.consecutiveColoredPots = 0; // Track consecutive colored pots
         this.foulCommitted = false; // Track if a foul has been committed
         this.penaltyValue = 0; // Penalty points for fouls
+
+        this.ballsToRespot = []; // Coloured balls to respot after being potted
+
     }
 
 

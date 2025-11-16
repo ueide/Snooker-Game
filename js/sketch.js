@@ -84,18 +84,35 @@ function draw() {
     } // ---- End cue ball placement logic
 
 
-    const canAin = snookerBalls.cueBall && 
-                    !snookerGame.isCueBallPlacementMode &&
-                    !snookerBalls.BallsMoving();
-
-    if(canAin) {
+    // ---- Display pool cue and shot power ---- //
+    if(!snookerGame.isCueBallPlacementMode && snookerBalls.cueBall) {
         const cueBallPos = snookerBalls.cueBall.body.position;
         poolCue.display(cueBallPos.x, cueBallPos.y, mouseX, mouseY);
-        shotPower.display();
-    } else {
-            cursor(ARROW); // Show cursor normally
+    }
+
+    shotPower.display(); // Display shot power UI
+
+
+    if(snookerGame.isShotTaken) {
+
+        // Check if all balls have stopped moving
+        if(!snookerBalls.BallsMoving()) {
+
+            // Re-spot coloured balls
+            if(snookerGame.ballsToRespot.length > 0) {
+                for(let ball of snookerGame.ballsToRespot) {
+                    snookerBalls.reSpotBall(ball);
+                }
+
+                snookerGame.ballsToRespot = []; // Clear the list after re-spotting
+            }
+
+            // Reset for next shot
+            snookerGame.isShotTaken = false; // Reset shot taking flag
+            console.log("All balls have stopped moving. Ready for next shot.");
         }
-    
+    }
+
 
 
 } // End draw function
@@ -158,6 +175,11 @@ function mousePressed() {
     }
 
 
+    if(snookerGame.isShotTaking) {
+        console.log("Shot already in progress. Please wait for balls to stop moving.");
+        return;
+    }
+
 
     // ---- Pool Cue Interaction (lock/unlock) ---- //
     if(!poolCue || !snookerBalls.cueBall) return;
@@ -197,6 +219,12 @@ function doubleClicked() {
 
 function mouseDragged() {
 
+    // ---- Ignore dragging if shot is taken ---- //
+    if(snookerGame.isShotTaken) {
+        return; // Ignore dragging if shot is taken
+    }
+
+
     // ---- Shot Power Dragging ---- //
     if(shotPower.isDragging) {
         shotPower.updateDrag(mouseY);
@@ -209,7 +237,7 @@ function mouseDragged() {
 function mouseReleased() {
 
     // ---- Shot Power Release ---- //
-    if(shotPower && shotPower.isDragging) {
+    if(shotPower.isDragging) {
         shotPower.endDrag();
         console.log("Shot power set to.");
     }

@@ -187,21 +187,25 @@ class Balls {
 
 
 
-    BallsMoving(velocityThreshold = 0.01) {
+    BallsMoving() { 
+        const movimentThreshold = 0.05; // Velocity threshold to consider ball as moving
+        const angularThreshold = 0.01; // Angular velocity threshold
+
         for(let ball of this.allBalls) {
             if(ball.isPotted) continue; // Skip potted balls
 
             const velX = ball.body.velocity.x;
             const velY = ball.body.velocity.y;
-            const angleVel = ball.body.angularVelocity;
-            if(Math.abs(velX) > velocityThreshold || 
-                Math.abs(velY) > velocityThreshold || 
-                Math.abs(angleVel) > 0.01) {
+            const angularVel = ball.body.angularVelocity;
 
+            const speed = Math.sqrt(velX * velX + velY * velY);
+            if(speed > movimentThreshold || Math.abs(angularVel) > angularThreshold) {
                 return true; // At least one ball is still moving
             }
-        return false; // No balls are moving
         }
+        
+        return false; // All balls are stationary
+
     }
 
 
@@ -244,8 +248,9 @@ class Balls {
                     this.allBalls.splice(i, 1);
                 }
                 else if(ball.value >= 2 && ball.value <= 7) { // Coloured ball
-                        this.reSpotBall(ball);
-                    }
+                    // Update score based on ball value
+                    snookerGame.ballsToRespot.push(ball);
+                }
                 
             }
         }

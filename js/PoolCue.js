@@ -35,6 +35,11 @@ class PoolCue {
         let cueX = cueBallX
         let cueY = cueBallY;        
 
+        if(snookerGame.isShotTaken) {
+            return; // Do not display the cue if the shot has been taken
+        }
+
+
         // Determine cue position
         if(this.isLocked) {
             // Use locked position
