@@ -33,6 +33,15 @@ function setup() {
     // Run the engine
     Runner.run(engine);
 
+
+    // Event listener for after each engine update
+    Matter.Events.on(engine, 'afterUpdate', function() {
+        if(!snookerGame.isCueBallPlacementMode) {
+            snookerBalls.checkBallsInPockets();
+        }
+    });
+
+
     // Log setup info
     console.log(`Setup complete. Canvas size: ${Game.CANVAS_WIDTH}x${Game.CANVAS_HEIGHT}`);
     console.log(`Table position: (${Game.TABLE_X_OFFSET}, ${Game.TABLE_Y_OFFSET}), Size: ${Game.TABLE_WIDTH}x${Game.TABLE_HEIGHT}`);
@@ -65,7 +74,7 @@ function draw() {
         if(mouseOverFelt) {
             // Draw cue ball at mouse position
             snookerBalls.displayCueBallHand();
-            noCursor(); // Hide cursor for better visibility
+            cursor(HAND)
         } else {
             cursor(ARROW); // Show cursor
         }
@@ -75,20 +84,18 @@ function draw() {
     } // ---- End cue ball placement logic
 
 
+    const canAin = snookerBalls.cueBall && 
+                    !snookerGame.isCueBallPlacementMode &&
+                    !snookerBalls.BallsMoving();
 
-    // Display pool cue and shot power only if cue ball is placed
-    if(snookerBalls.cueBall) {
+    if(canAin) {
         const cueBallPos = snookerBalls.cueBall.body.position;
-
-        // Display pool cue
         poolCue.display(cueBallPos.x, cueBallPos.y, mouseX, mouseY);
-        // Display shot power
         shotPower.display();
-    }
-
-
-    // Show cursor normally
-    cursor(ARROW);
+    } else {
+            cursor(ARROW); // Show cursor normally
+        }
+    
 
 
 } // End draw function

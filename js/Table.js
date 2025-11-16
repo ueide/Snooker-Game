@@ -34,6 +34,76 @@ class Table {
         this.inlay_size = 56;
         this.inlay_diameter = 5.4;
 
+        // Physical Cushion
+        this.physicalCushion();
+
+        // Pocket positions for reference
+        this.pockets = [
+            { x: this.x + this.pocket_OffSet, y: this.y + this.pocket_OffSet, name: 'TL' }, // Top-Left
+            { x: this.x + this.width / 2, y: this.y + this.pocket_OffSet, name: 'TC' }, // Top-Center
+            { x: this.x + this.width - this.pocket_OffSet, y: this.y + this.pocket_OffSet, name: 'TR' }, // Top-Right
+
+            { x: this.x + this.pocket_OffSet, y: this.y + this.height - this.pocket_OffSet, name:'BL' }, // Bottom-Left
+            { x: this.x + this.width / 2, y: this.y + this.height - this.pocket_OffSet, name: 'BC'}, // Bottom-Center
+            { x: this.x + this.width - this.pocket_OffSet, y: this.y + this.height - this.pocket_OffSet, name: 'BR' } // Bottom-Right
+        ];
+
+    } // End of constructor
+
+
+    physicalCushion() {
+        // Create physical cushions using Matter.js
+        const cushion_w_phy = 10; // Physical cushion width
+        const PktD = this.pocketDiameter;
+        const FeltX = this.feltX;
+        const FeltY = this.feltY;
+        const FeltW = this.feltWidth;
+        const FeltH = this.feltHeight;
+
+        const GapC = PktD + 1.6; // Corner Gap
+        const GapS = PktD * 0.9 // Side Gap
+
+        const cushionsSett = {
+            isStatic: true,
+            restitution: 0.85,
+            friction: 0.05,
+            label: 'cushion'
+        }
+
+        let cushions = []; // Array to hold cushion bodies
+
+        // --- TOP CUSHIONS --- //
+        const TopLength = (FeltW - (2 * GapC)) / 2; // Length of top cushions
+        const YPos = FeltY - (cushion_w_phy / 2); //Cushion Y Position
+        // Top-Left Cushion
+        const TopLeftX = FeltX + GapC + (TopLength / 2);
+        cushions.push(Matter.Bodies.rectangle(TopLeftX, YPos, TopLength, cushion_w_phy, cushionsSett));
+        // Top-Right Cushion
+        const TopRightX = FeltX + FeltW - GapC - (TopLength / 2);
+        cushions.push(Matter.Bodies.rectangle(TopRightX, YPos, TopLength, cushion_w_phy, cushionsSett));
+
+        // --- BOTTOM CUSHIONS --- //
+        const BottomYPos = FeltY + FeltH + (cushion_w_phy / 2); // Cushion Y Position
+        // Bottom-Left Cushion
+        cushions.push(Matter.Bodies.rectangle(TopLeftX, BottomYPos, TopLength, cushion_w_phy, cushionsSett));
+        // Bottom-Right Cushion
+        cushions.push(Matter.Bodies.rectangle(TopRightX, BottomYPos, TopLength, cushion_w_phy, cushionsSett));
+
+        // --- LEFT CUSHION --- //
+        const SideLength = FeltH - (2 * GapC); // Length of side cushions
+        const XPosLeft = FeltX - (cushion_w_phy / 2); // Cushion X Position
+        const XPosRight = FeltX + FeltW + (cushion_w_phy / 2); // Cushion X Position
+        const YPosCenter = FeltY + (FeltH / 2);
+        // Left Cushion
+        cushions.push(Matter.Bodies.rectangle(XPosLeft, YPosCenter, cushion_w_phy, SideLength, cushionsSett));
+
+        // --- RIGHT CUSHION --- //
+        cushions.push(Matter.Bodies.rectangle(XPosRight, YPosCenter, cushion_w_phy, SideLength, cushionsSett));
+
+        // Add all cushions to the Matter.js world
+        Matter.World.add(engine.world, cushions);
+        
+
     }
 
     display () {
@@ -208,18 +278,7 @@ class Table {
 
 
         // ---- POCKETS (black holes) ---- //
-        fill(18); // Black color for pockets
-
-        // Corner Pockets
-        ellipse(this.x + pk_OS, this.y + pk_OS, pk_diam, pk_diam); // Top-Left Corner
-        ellipse(this.x + pk_OS, this.y + this.height - pk_OS, pk_diam, pk_diam); // Bottom-Left Corner
-
-        ellipse(this.x + this.width - pk_OS, this.y + pk_OS, pk_diam, pk_diam); // Top-Right Corner
-        ellipse(this.x + this.width - pk_OS, this.y + this.height - pk_OS, pk_diam, pk_diam); // Bottom-Right Corner
-
-        ellipse(this.x + this.width / 2, this.y + pk_OS - 6, pk_diam, pk_diam); // Top-Center
-        ellipse(this.x + this.width / 2, this.y + this.height - pk_OS + 6, pk_diam, pk_diam); // Bottom-Center
-
+        this.drawPockets();
         // ---- END POCKETS ---- //
 
 
@@ -278,6 +337,36 @@ class Table {
         }
 
         return true; // Inside D zone
+    }
+
+
+
+    isBallInPocket(ball) {
+        // Check if the ball is in any pocket
+        const ballPos = ball.body.position;
+        const pocketDectRadius = this.pocketRadius * 1.5; // Detection radius
+
+        for(let pocket of this.pockets) {
+            // Calculate distance between ball and pocket
+            const distanceToPocket = dist(ballPos.x, ballPos.y, pocket.x, pocket.y);
+            if(distanceToPocket < pocketDectRadius) {
+                return pocket; // Return the name of the pocket
+            }
+        }
+        return null; // Ball is not in any pocket
+    }
+
+
+
+    drawPockets() {
+        push();
+        noStroke();
+        fill(18);
+
+        for(let pocket of this.pockets) {
+            circle(pocket.x, pocket.y, this.pocketDiameter);
+        }
+        pop();
     }
 
 }

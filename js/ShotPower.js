@@ -235,7 +235,34 @@ class ShotPower {
 
 
     endDrag() {
-        this.isDragging = false;
+
+        
+        if(!this.isDragging) return;// Prevent multiple calls
+        this.isDragging = false; // Stop dragging
+
+        if(!snookerBalls.cueBall || !poolCue || !poolCue.isLocked) {
+            this.shotPower = 0; // Reset shot power if no cue ball or cue not locked
+            return;
+        }
+
+        // ---- SHOT PHYSICS ----
+        const MaxSpeed = 24; // Maximum force applied to the cue ball
+        const speed = this.shotPower * MaxSpeed; // Scale shot power to speed
+        const angle = poolCue.lockAngle; // Use the locked angle of the cue
+        const velocityX = Math.cos(angle) * speed; 
+        const velocityY = Math.sin(angle) * speed;    
+
+        Matter.Body.setVelocity(snookerBalls.cueBall.body, {x: velocityX, y: velocityY});
+
+        poolCue.shotDistance = 0; // Reset shot distance after the shot
+        poolCue.isLocked = false; // Unlock the cue after the shot
+
+        console.log(`Shot taken with power: ${this.shotPower.toFixed(2)} (Speed: ${speed.toFixed(2)}) at angle: ${degrees(angle).toFixed(2)}°`);
+
+        //--- END SHOT PHYSICS ----
+
+
+        //this.isDragging = false;
         this.shotPower = 0; // Reset shot power after the shot
 
         if(poolCue) {

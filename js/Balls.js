@@ -22,6 +22,9 @@ class Balls {
             BLUE: { name: 'Blue', value: 5, rgb: [0, 0, 255] },
             PINK: { name: 'Pink', value: 6, rgb: [255, 192, 203] },
             BLACK: { name: 'Black', value: 7, rgb: [10, 10, 10] },
+
+            //Ball On: Displayed in header
+            COLOUR: { name: 'Colour', value: null, rgb: [255, 255, 255] }
         };
 
         // Starting positions for each ball on the table
@@ -37,6 +40,16 @@ class Balls {
             CUE_DEFAULT: {x: table.feltX + table.feltWidth * 0.1, y: table.feltC_y},
 
             RED_APEX: {x: table.feltC_x + table.feltWidth * 0.232, y: table.feltC_y}, // Apex of red triangle
+        };
+
+        // Re-spot coloured balls after they are potted
+        this.reSpotPositions = {
+            YELLOW: this.balls_spot.YELLOW,
+            GREEN: this.balls_spot.GREEN,
+            BROWN: this.balls_spot.BROWN,
+            BLUE: this.balls_spot.BLUE,
+            PINK: this.balls_spot.PINK,
+            BLACK: this.balls_spot.BLACK,
         };
 
         // Initialize all balls and store them in allBalls array
@@ -169,11 +182,127 @@ class Balls {
 
         fill(color[0], color[1], color[2], 200);
         circle(mouseX, mouseY, this.ballRadius * 2);
-
-        //Put a img hand holding the ball
-        //let handImg; function preload() { handImg = loadImage('path/to/hand.png'); }
         pop();
     }
+
+
+
+    BallsMoving(velocityThreshold = 0.01) {
+        for(let ball of this.allBalls) {
+            if(ball.isPotted) continue; // Skip potted balls
+
+            const velX = ball.body.velocity.x;
+            const velY = ball.body.velocity.y;
+            const angleVel = ball.body.angularVelocity;
+            if(Math.abs(velX) > velocityThreshold || 
+                Math.abs(velY) > velocityThreshold || 
+                Math.abs(angleVel) > 0.01) {
+
+                return true; // At least one ball is still moving
+            }
+        return false; // No balls are moving
+        }
+    }
+
+
+
+    checkBallsInPockets() {
+        for (let i = this.allBalls.length - 1; i >= 0; i--) {
+            let ball = this.allBalls[i];
+
+            if(ball.isPotted) continue; // Skip already potted balls
+
+            // Check if ball is in any pocket
+            const pocked = this.table.isBallInPocket(ball);
+            if(pocked) {
+                console.log(`${ball.color.name} ball potted!`);
+
+                // Mark ball as potted
+                ball.isPotted = true;
+                // Remove ball from physics world
+                Matter.World.remove(engine.world, ball.body);
+
+
+                // If it's a coloured ball, re-spot it
+                if(ball.isCueBall) {
+                    snookerGame.foulCommitted = true;
+
+                    // snookerGame.penaltyValue = Math.max(
+                    //     snookerGame.BallOn === 'RED' ? 4 : 
+                    //     this.balls_prop[snookerGame.BallOn.toUpperCase].value || 7); 
+
+                    this.allBalls.splice(i, 1);
+                    this.cueBall = null;
+                    this.isCueBallPlaced = false;
+                    snookerGame.isCueBallPlacementMode = true;
+                    snookerGame.endTurn();
+                }
+                else if(ball.value === 1 ) { // Red ball
+                    snookerGame.updateScores(1);
+                    snookerGame.pottedReds += 1;
+                    snookerGame.BallOn = 'COLOUR'; // Next ball on is a coloured ball
+                    this.allBalls.splice(i, 1);
+                }
+                else if(ball.value >= 2 && ball.value <= 7) { // Coloured ball
+                        this.reSpotBall(ball);
+                    }
+                
+            }
+        }
+
+    }
+
+
+    reSpotBall(pottedBall) {
+        const ballName = pottedBall.color.name.toUpperCase();
+        const originalSpot = this.reSpotPositions[ballName];
+        let targetSpot = originalSpot;
+
+        if(!targetSpot) {
+            console.error(`No spot defined for ${ballName} ball.`);
+            return;
+        }
+
+        let isSpotOccupied = false;
+        const collisionRadius = this.ballRadius * 2 + 0.1; // Small padding to avoid overlaps
+
+        // Check if the original spot is occupied
+        for(let otherBall of this.allBalls) {
+            // Check if other ball is too close to the target spot
+            if(otherBall.isPotted || otherBall === pottedBall) continue;
+
+            // Check distance between target spot and other ball
+            const distance = dist(targetSpot.x, targetSpot.y, otherBall.body.position.x, otherBall.body.position.y);
+            if(distance < collisionRadius) {
+                isSpotOccupied = true;
+                break;
+            }
+        }
+
+        // Re-spot the ball if spot is occupied
+        if(isSpotOccupied) {
+            // Find nearest available position around the original spot
+            targetSpot = this.reSpotPositions.BLACK; // Default to black spot if needed
+            console.log(`${ballName} spot occupied. Re-spotting at Black ball spot.`);
+        
+        } else {
+            // Re-spot at original position
+            console.log(`Re-spotting ${ballName} ball at its original spot.`);
+        }
+
+        // Create and add the re-spotted ball to the world
+        const newBall = new Ball(
+                targetSpot.x, targetSpot.y, this.ballRadius, pottedBall.color, pottedBall.value);
+
+        // Add new ball to allBalls array, replacing the potted ball
+        const index = this.allBalls.indexOf(pottedBall);
+        if(index > - 1) {
+            this.allBalls.splice(index, 1, newBall);
+        }
+
+        newBall.isPotted = false; // Reset potted status
+    }
+
 
 
 }
