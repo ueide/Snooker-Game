@@ -78,10 +78,9 @@ function draw() {
         } else {
             cursor(ARROW); // Show cursor
         }
-
     return; // Skip the rest of draw loop
-
     } // ---- End cue ball placement logic
+
 
 
     // ---- Display pool cue and shot power ---- //
@@ -90,27 +89,32 @@ function draw() {
         poolCue.display(cueBallPos.x, cueBallPos.y, mouseX, mouseY);
     }
 
+
     shotPower.display(); // Display shot power UI
 
 
-    if(snookerGame.isShotTaken) {
+    // ---- Check if all balls have stopped moving ---- //
+    if(!snookerBalls.BallsMoving()) {
 
-        // Check if all balls have stopped moving
-        if(!snookerBalls.BallsMoving()) {
-
-            // Re-spot coloured balls
-            if(snookerGame.ballsToRespot.length > 0) {
-                for(let ball of snookerGame.ballsToRespot) {
-                    snookerBalls.reSpotBall(ball);
-                }
-
-                snookerGame.ballsToRespot = []; // Clear the list after re-spotting
+        // Re-spot coloured balls
+        if(snookerGame.ballsToRespot.length > 0) {
+            for(let ball of snookerGame.ballsToRespot) {
+                snookerBalls.reSpotBall(ball);
             }
-
-            // Reset for next shot
-            snookerGame.isShotTaken = false; // Reset shot taking flag
-            console.log("All balls have stopped moving. Ready for next shot.");
+            snookerGame.ballsToRespot = []; // Clear the list after re-spotting
         }
+
+        // Reset for next shot
+        snookerGame.isShotTaken = false; // Reset shot taking flag
+        console.log("All balls have stopped moving. Ready for next shot.");
+    }
+
+
+
+
+    // ---- Draw Prediction Line ---- //
+    if(poolCue && poolCue.isLocked && snookerBalls.cueBall && !snookerGame.isShotTaken) {
+        snookerBalls.drawPredictedPath(snookerBalls.cueBall, poolCue.lockAngle);
     }
 
 

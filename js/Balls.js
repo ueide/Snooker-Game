@@ -146,10 +146,75 @@ class Balls {
 
 
     display() {
+        // ---- Display all balls ---- //
         for (let ball of this.allBalls) {
             ball.display();
         }
+        // ---- End display all balls ---- //
+
+
+
+        // ---- Predicted Path for Balls ---- //
+        if(!snookerGame.isShotTaken && this.cueBall && !snookerGame.isCueBallPlacementMode) {
+
+            // Get the coordinates of the cue ball
+            const cueBallPos = this.cueBall.body.position;
+            let aimAngle;
+            if(poolCue.isLocked) {
+            aimAngle = poolCue.lockAngle;
+            } else {
+                // when unlocked, aim towards mouse position
+                aimAngle = atan2(mouseY - cueBallPos.y, mouseX - cueBallPos.x);
+            }
+
+            // Predict the path of the cue ball
+            const predictedPath = this.drawPredictedPath(this.cueBall, aimAngle);
+
+            push(); // First push: solid line
+            for(let i = 0; i < predictedPath.length; i++) {
+                const segment = predictedPath[i];
+
+                // Draw White ball path (solid line)
+                if (segment.type.startsWith ('cue_')) {
+                    stroke(240, 240, 240, 150);
+                    strokeWeight(2);
+                    line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
+                }
+                // Coloured balls path after hit (dashed line)
+                else if (segment.type.startsWith('object_ball_')) {
+                    const centerBall = segment.start;
+                    const deflectionAngle = segment.angle;
+                    const endPos = segment.end;
+
+                    const actualLength = dist(centerBall.x, centerBall.y, endPos.x, endPos.y);
+
+                    push(); // Second push: dashed line
+                    stroke(240, 240, 240, 150);
+                    strokeWeight(2);
+
+                    // Draw dashed line for deflected ball path
+                    const dashLength = 4;
+                    const gapLength = 6;
+                    const segmentStep = dashLength + gapLength;
+
+                    let startX = centerBall.x;
+                    let startY = centerBall.y;
+
+                    for(let currentTravel = 0; currentTravel < actualLength; currentTravel += segmentStep) {
+                        let x1 = startX + cos(deflectionAngle) * currentTravel; // Starting point of dash
+                        let y1 = startY + sin(deflectionAngle) * currentTravel; // Starting point of dash
+                        let x2 = startX + cos(deflectionAngle) * Math.min(currentTravel + dashLength, actualLength); // End point of dash
+                        let y2 = startY + sin(deflectionAngle) * Math.min(currentTravel + dashLength, actualLength); // End point of dash
+
+                        line(x1, y1, x2, y2); // Dashed Line segment
+                    }
+                    pop(); // End second push
+                }
+            }
+            pop(); // End first push
+        }
     }
+
 
 
     // Place the cue ball at specified coordinates
@@ -231,10 +296,6 @@ class Balls {
                 if(ball.isCueBall) {
                     snookerGame.foulCommitted = true;
 
-                    // snookerGame.penaltyValue = Math.max(
-                    //     snookerGame.BallOn === 'RED' ? 4 : 
-                    //     this.balls_prop[snookerGame.BallOn.toUpperCase].value || 7); 
-
                     this.allBalls.splice(i, 1);
                     this.cueBall = null;
                     this.isCueBallPlaced = false;
@@ -309,5 +370,281 @@ class Balls {
     }
 
 
+
+
+    findClosestColission(startPos, directionAngle, ballRadius, ballToExclude) {
+        let closestCollision = {
+            dist: Infinity,
+            pos: null,
+            type: null, // 'ball', 'pocket', 'cushion'
+            targetBall: null,
+            pocket: null
+        };
+
+        const directionVector = p5.Vector.fromAngle(directionAngle);
+        const rayStart = createVector(startPos.x, startPos.y);
+
+        // Check collision with other balls
+        const ballsToCheck = this.allBalls.filter(ball => ball !== ballToExclude && !ball.isPotted);
+        for(let ball of ballsToCheck) {
+            const ballPos = createVector(ball.body.position.x, ball.body.position.y);
+            const toBall = p5.Vector.sub(ballPos, rayStart);
+            const radius = ballRadius + ballRadius;
+
+            const tca = toBall.dot(directionVector);
+            if(tca < 0) continue; // Ball is behind the ray
+
+            const d2 = toBall.dot(toBall) - tca * tca;
+            if(d2 > radius * radius) continue; // No collision
+
+            const thc = Math.sqrt(radius * radius - d2);
+            const t0 = tca - thc;
+            
+            if(t0 > 0.001 && t0 < closestCollision.dist) {
+                closestCollision = {
+                    dist: t0,
+                    pos: p5.Vector.add(rayStart, p5.Vector.mult(directionVector, t0)),
+                    type: 'ball',
+                    targetBall: ball,
+                    pocket: null
+                };
+            }
+        }
+
+
+        // Check collision with pockets
+        for(let pocket of snookerTable.pockets) {
+            const pocketPos = createVector(pocket.x, pocket.y);
+            const toPocket = p5.Vector.sub(pocketPos, rayStart);
+            const radius = snookerTable.pocketRadius + 12; // Effective radius for collision
+
+            const tca = toPocket.dot(directionVector);
+            const d2 = toPocket.dot(toPocket) - tca * tca;
+            const radiusEff = radius - ballRadius;
+
+            if(d2 > radiusEff * radiusEff) continue; // No collision
+
+            const thc = Math.sqrt(radiusEff * radiusEff - d2);
+            const t0 = tca - thc;
+
+            if(t0 > 0.001 && t0 < closestCollision.dist) {
+                closestCollision = {
+                    dist: t0,
+                    pos: p5.Vector.add(rayStart, p5.Vector.mult(directionVector, t0)),
+                    type: 'pocket',
+                    targetBall: null,
+                    pocket: pocket
+                };
+            }
+        }
+
+
+        // Check collision with table cushions
+        const minX = snookerTable.feltX + ballRadius;
+        const maxX = snookerTable.feltX + snookerTable.feltWidth - ballRadius;
+        const minY = snookerTable.feltY + ballRadius;
+        const maxY = snookerTable.feltY + snookerTable.feltHeight - ballRadius;
+
+        // Vertical cushions
+        if(abs(directionVector.x) > 0.001) {
+            const targetX = directionVector.x > 0 ? maxX : minX;
+            const t = (targetX - startPos.x) / directionVector.x;
+
+            if(t > 0.001 && t < closestCollision.dist) {
+                const yHit = startPos.y + directionVector.y * t;
+
+                if(yHit >= minY && yHit <= maxY) {
+                    closestCollision = {
+                        dist: t,
+                        pos: createVector(targetX, yHit),
+                        type: 'cushion',
+                        targetBall: null,
+                        pocket: null,
+                        normalAngle: directionVector.x > 0 ? PI : 0
+                    };
+                }
+            }
+        }
+
+        // Horizontal cushions
+        if(abs(directionVector.y) > 0.001) {
+            const targetY = directionVector.y > 0 ? maxY : minY;
+            const t = (targetY - startPos.y) / directionVector.y;
+
+            if(t > 0.001 && t < closestCollision.dist) {
+                const xHit = startPos.x + directionVector.x * t;
+                if(xHit >= minX && xHit <= maxX) {
+                    closestCollision = {
+                        dist: t,
+                        pos: createVector(xHit, targetY),
+                        type: 'cushion',
+                        targetBall: null,
+                        pocket: null,
+                        normalAngle: directionVector.y > 0 ? -HALF_PI : HALF_PI
+                    };
+                }
+            }
+        }
+
+        return closestCollision.dist === Infinity ? null : closestCollision;
+
+    } // ---- End of findClosestColission ---- //
+
+
+
+    drawPredictedPath(startBall, initialAngle) {
+        // ---- Cue Ball (solid line)Path Prediction ---- //
+        const {segments: cueSegments, lastCollision} = this._getPredictionSegments(
+            startBall.body.position,
+            initialAngle,
+            startBall,
+            'cue_path',
+            true, //stopOnBallCollision
+            [800, 400] // Line Lengths
+        );
+
+        let allSegments = cueSegments;
+
+
+
+        // ---- Object Ball (dashed line) Path Prediction ---- //
+        if(lastCollision && lastCollision.type === 'ball') {
+            const targetBall = lastCollision.targetBall;
+            const hitPos = lastCollision.pos;
+            const targetPos = targetBall.body.position;
+
+            // Calculate deflection angle for the target ball
+            const deflectionAngle = atan2(targetPos.y - hitPos.y, targetPos.x - hitPos.x);
+
+            // Get prediction segments for the target ball
+            const {segments: objSegments} = this._getPredictionSegments(
+                targetPos,
+                deflectionAngle,
+                targetBall,
+                'object_ball_path',
+                false, //stopOnBallCollision
+                [500, 300] // Line Lengths
+            );
+
+            // Combine segments ( cue ball path + object ball path )
+            allSegments = allSegments.concat(objSegments);
+        }
+        return allSegments;
+    }
+
+
+    // Helper function to get prediction segments
+    _getPredictionSegments(startPos, startAngle, ballToExclude, pathType, stopOnBallCollision, maxLengths) {
+        const Max_Seg = 2;  // Maximum number of segments to predict
+        const segments = []; // To store path segments
+        let lastCollision = null; // To store the last collision info
+
+        let currentPos = startPos; // Initial position
+        let currentAngle = startAngle; // Initial angle
+        
+        // Loop to find segments and collisions
+        for(let i = 0; i < Max_Seg; i++) {
+            // Define max length for current segment
+            const currentMaxLength = (maxLengths && maxLengths[i]) ? maxLengths[i] : Infinity;
+
+            const collision = this.findClosestColission(
+                currentPos,
+                currentAngle,
+                this.ballRadius,
+                ballToExclude
+            );
+
+            if(!collision) { // No collision found, extend line
+                const endPos = p5.Vector.add(
+                    createVector(currentPos.x, currentPos.y),
+                    p5.Vector.fromAngle(currentAngle).mult(currentMaxLength)
+                    // Line Length 
+                );
+
+                segments.push({start: currentPos, end: endPos, type: pathType, angle: currentAngle});
+                break; // No more collisions
+            }
+
+
+
+            // ---- Collision found ----- //
+
+            //-- Check if collision is beyond max length 
+            if(collision.dist > currentMaxLength) {
+                const endPos = p5.Vector.add(
+                    createVector(currentPos.x, currentPos.y),
+                    p5.Vector.fromAngle(currentAngle).mult(currentMaxLength)
+                );
+                segments.push({start: currentPos, end: endPos, type: pathType, angle: currentAngle});
+                break; // Segment ends before collision
+            }
+
+
+            // Calculate end position of the segment
+            let pathEndPos = collision.pos;
+
+            if(collision.type === 'cushion') {
+                const incomingVector = p5.Vector.fromAngle(currentAngle);
+                pathEndPos = createVector(collision.pos.x + incomingVector.x * 2,
+                            collision.pos.y + incomingVector.y * 2);
+            }
+
+            // Add segment to the list 
+            segments.push({start: currentPos, end: pathEndPos, type: pathType, angle: currentAngle});
+            lastCollision = collision; // Update last collision
+
+
+            // --- Handle collision response --- //
+
+            // Stop prediction on pocket collision
+            if(collision.type === 'pocket') {
+                break; 
+            }
+
+            // Ball collision: predict object ball path
+            if(collision.type === 'ball') {
+                if(stopOnBallCollision) {
+                    break; // Stop prediction on ball collision
+                } else {
+                    // Continue predicting for object ball
+                    currentPos = collision.pos;
+                    currentAngle = currentAngle; // Angle remains same for object ball
+                    continue;
+                }
+            }
+
+            // Bounce off cushion: calculate reflection angle
+            if(collision.type === 'cushion') { 
+                const normalAngle = collision.normalAngle;
+
+                if(Math.abs(cos(currentAngle - normalAngle)) > 0.001 &&
+                    (normalAngle === 0 || normalAngle === PI)) {
+                    // Vertical cushion
+                    currentAngle = PI - currentAngle;
+                }
+                else if(Math.abs(sin(currentAngle - normalAngle)) > 0.001 &&
+                    (normalAngle === HALF_PI || normalAngle === -HALF_PI)) {
+                    // Horizontal cushion
+                    currentAngle = -currentAngle;
+                }
+                else {
+                    break; // Angle too close to normal, stop prediction
+                }
+
+                // Update position slightly beyond cushion to avoid immediate re-collision
+                currentPos = collision.pos; // Update position to collision point
+                const directionVector = p5.Vector.fromAngle(currentAngle);
+                currentPos.x += directionVector.x * 2;
+                currentPos.y += directionVector.y * 2;
+
+                currentAngle = (currentAngle % TWO_PI + TWO_PI) % TWO_PI; // Normalize angle
+            }
+
+        }  // End of for loop
+
+        return {segments, lastCollision};
+
+
+    } // End of _getPredictionSegments
 
 }

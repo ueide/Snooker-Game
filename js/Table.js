@@ -85,7 +85,7 @@ class Table {
         // --- TOP RIGHT CUSHIONS --- //
         let verticesTopRight = [
             {x: this.x + this.width / 2 + sideGap - 16, y: this.y}, // Top-Left
-            {x: this.x + this.width - cornerGap + 20, y: this.y}, // Top-Right
+            {x: this.x + this.width - cornerGap + 21, y: this.y}, // Top-Right
             {x: this.x + this.width - cornerGap + 2, y: this.feltY}, // Bottom-Right
             {x: this.x + this.width / 2 + sideGap, y: this.feltY} // Bottom-Left
         ];
@@ -118,7 +118,7 @@ class Table {
         // --- LEFT CUSHIONS --- //
         let verticesLeft = [
             {x: this.x, y: this.feltY + cornerGap - 30}, // Top-Left
-            {x: this.feltX, y: this.feltY + cornerGap - 12}, // Top-Right
+            {x: this.feltX, y: this.feltY + cornerGap - 13}, // Top-Right
             {x: this.feltX, y: this.feltY + this.feltHeight - cornerGap + 12}, // Bottom-Right
             {x: this.x, y: this.feltY + this.feltHeight - cornerGap + 30} // Bottom-Left
         ];
