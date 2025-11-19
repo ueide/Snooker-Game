@@ -13,6 +13,25 @@ let poolCue;
 let shotPower;
 let snookerBalls;
 
+// sounds effects
+let ball_collision_sound;
+let on_pocket_sound;
+let strike_sound;
+
+
+function preload() {
+    // Load sound effects
+    ball_collision_sound = loadSound('assets/ball_collision_sound.mp3');
+    on_pocket_sound = loadSound('assets/on_pocket_sound.mp3');
+    strike_sound = loadSound('assets/strike_sound.mp3');
+
+    ball_collision_sound.setVolume(0.4);
+    on_pocket_sound.setVolume(0.4);
+    strike_sound.setVolume(0.3);
+}
+
+
+
 function setup() {
     createCanvas(Game.CANVAS_WIDTH, Game.CANVAS_HEIGHT);
 
@@ -45,6 +64,7 @@ function setup() {
     Matter.Events.on(engine, 'collisionStart', function(event) {
         if(snookerGame.isShotTaken && !snookerBalls.firstBallHit) {
             snookerBalls.handleCollision(event);
+            ball_collision_sound.play();
         }
     });
 

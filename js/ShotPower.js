@@ -245,6 +245,10 @@ class ShotPower {
             return;
         }
 
+        //Sound effect
+        strike_sound.play();
+        
+
         // ---- SHOT PHYSICS ----
         const MaxSpeed = 18; // Maximum force applied to the cue ball
         const speed = this.shotPower * MaxSpeed; // Scale shot power to speed

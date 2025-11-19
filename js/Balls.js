@@ -291,6 +291,10 @@ class Balls {
             if(pocked) {
                 // Mark ball as potted
                 ball.isPotted = true;
+
+                // Sounds effect
+                on_pocket_sound.play();
+
                 // Remove ball from physics world
                 Matter.World.remove(engine.world, ball.body);
 
@@ -301,16 +305,9 @@ class Balls {
                     this.cueBall = null;
                     this.isCueBallPlaced = false;
 
-                    //snookerGame.isCueBallPlacementMode = true;
-                    //snookerGame.endTurn();
                 } else {
                     // Track potted object balls for shot result checking
                     this.pottedObjBallsOnShot.push(ball);
-
-                    // Add coloured balls to respot list
-                    //snookerGame.ballsToRespot.push(ball);
-                    // Note: When the upper line is not commented, show a error
-                    // Balls.js:544 No spot defined for Green ball
                 }
                 
             }
@@ -497,18 +494,29 @@ class Balls {
                     } else {
                         // No Reds remaining, continue with Colours in order
                         snookerGame.ballsToRespot.push(...pottedBalls); // Respot Colours
-                        snookerGame.BallOn = 'Yellow'; // Next Colour in order
+                        snookerGame.BallOn = Game.COLOR_ORDER;
+                        //snookerGame.BallOn = 'Yellow'; // Next Colour in order
                     }
                 }
                 else {
-                    const order = ['Yellow', 'Green', 'Brown', 'Blue', 'Pink', 'Black'];
+                    //const order = ['Yellow', 'Green', 'Brown', 'Blue', 'Pink', 'Black'];
+                    const order = Game.COLOR_ORDER;
                     let idX = order.indexOf(ballOn);
-                    if(idX !== -1 && idX < order.length - 1) {
-                        snookerGame.BallOn = order[idX + 1]; // Next Colour in order
-                    } else {
-                        snookerGame.BallOn = 'End Game'; // End of frame
-                        snookerGame.displayMessage("All balls potted! Frame over.");
-                    }
+                    if(idX !== -1) {
+                        for(let ball of pottedBalls) {
+                            const index = this.allBalls.indexOf(ball);
+                            if(index > -1) {
+                                this.allBalls.splice(index, 1); // Remove potted colour from allBalls
+                            }
+                        }
+
+                        if (idX < order.length - 1) {
+                            snookerGame.BallOn = order[idX + 1]; // Next Colour in order
+                        } else {
+                            snookerGame.BallOn = 'End Game'; // End of frame
+                            snookerGame.displayMessage("All balls potted! Good Job!");
+                        }
+                    } 
                 }
             } 
             // No Balls Potted
