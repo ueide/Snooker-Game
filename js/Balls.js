@@ -12,6 +12,11 @@ class Balls {
         this.isCueBallPlaced = false; 
         this.ballRadius = this.table.ballDiameter / 2;
 
+        this.pottedObjBallsOnShot = [];
+        this.cueBallPottedOnShot = false;
+        this.firstBallHit = null; // Track the first ball hit by the cue ball
+
+
         // Define the properties for each type of ball
         this.balls_prop = {
             CUE: { name: 'White', value: 0, rgb: [255, 255, 240] },
@@ -28,7 +33,6 @@ class Balls {
         };
 
         // Starting positions for each ball on the table
-        //Use the table dimensions to calculate positions
         this.balls_spot = {
             BLACK: {x: table.feltX + table.feltWidth * (1 - 0.09075), y: table.feltC_y },
             PINK: {x: table.feltC_x + table.feltWidth * 0.20, y: table.feltC_y },
@@ -41,6 +45,7 @@ class Balls {
 
             RED_APEX: {x: table.feltC_x + table.feltWidth * 0.232, y: table.feltC_y}, // Apex of red triangle
         };
+
 
         // Re-spot coloured balls after they are potted
         this.reSpotPositions = {
@@ -92,7 +97,6 @@ class Balls {
             }
         }
         return positions;
-
     }
 
 
@@ -241,6 +245,7 @@ class Balls {
 
 
     displayCueBallHand(){
+        // Display semi-transparent cue ball at mouse position during placement
         push();
         noStroke();
         const color = this.balls_prop.CUE.rgb;
@@ -252,8 +257,8 @@ class Balls {
 
 
 
-    BallsMoving() { 
-        const movimentThreshold = 0.05; // Velocity threshold to consider ball as moving
+    areBallsMoving() { 
+        const movimentThreshold = 0.001; // Velocity threshold to consider ball as moving
         const angularThreshold = 0.01; // Angular velocity threshold
 
         for(let ball of this.allBalls) {
@@ -275,7 +280,7 @@ class Balls {
 
 
 
-    checkBallsInPockets() {
+    checkBallsInPockets() { // Check and handle balls that have been potted
         for (let i = this.allBalls.length - 1; i >= 0; i--) {
             let ball = this.allBalls[i];
 
@@ -284,45 +289,254 @@ class Balls {
             // Check if ball is in any pocket
             const pocked = this.table.isBallInPocket(ball);
             if(pocked) {
-                console.log(`${ball.color.name} ball potted!`);
-
                 // Mark ball as potted
                 ball.isPotted = true;
                 // Remove ball from physics world
                 Matter.World.remove(engine.world, ball.body);
 
-
                 // If it's a coloured ball, re-spot it
                 if(ball.isCueBall) {
-                    snookerGame.foulCommitted = true;
-
+                    this.cueBallPottedOnShot = true;
                     this.allBalls.splice(i, 1);
                     this.cueBall = null;
                     this.isCueBallPlaced = false;
-                    snookerGame.isCueBallPlacementMode = true;
-                    snookerGame.endTurn();
-                }
-                else if(ball.value === 1 ) { // Red ball
-                    snookerGame.updateScores(1);
-                    snookerGame.pottedReds += 1;
-                    snookerGame.BallOn = 'COLOUR'; // Next ball on is a coloured ball
-                    this.allBalls.splice(i, 1);
-                }
-                else if(ball.value >= 2 && ball.value <= 7) { // Coloured ball
-                    // Update score based on ball value
-                    snookerGame.ballsToRespot.push(ball);
+
+                    //snookerGame.isCueBallPlacementMode = true;
+                    //snookerGame.endTurn();
+                } else {
+                    // Track potted object balls for shot result checking
+                    this.pottedObjBallsOnShot.push(ball);
+
+                    // Add coloured balls to respot list
+                    //snookerGame.ballsToRespot.push(ball);
+                    // Note: When the upper line is not commented, show a error
+                    // Balls.js:544 No spot defined for Green ball
                 }
                 
             }
         }
-
     }
 
 
+
+    handleCollision(event) { // Track first ball hit by cue ball
+        const pairs = event.pairs;
+
+        for(let i = 0; i < pairs.length; i++) {
+            const bodyA = pairs[i].bodyA; // First body in collision
+            const bodyB = pairs[i].bodyB; // Second body in collision
+
+            let otherBody = null;
+            // If cue ball is involved in the collision
+            if(bodyA.label === 'cueBall') otherBody = bodyB;
+            else if(bodyB.label === 'cueBall') otherBody = bodyA;
+
+            if(otherBody) {
+                // Find the ball object corresponding to otherBody
+                if(otherBody.label !== 'cushion' && otherBody.label !== 'pocket') {
+                    if(!this.firstBallHit) {
+                        const hitBall = this.allBalls.find(ball => ball.body === otherBody);
+                        if(hitBall) {
+                            this.firstBallHit = hitBall;
+                            console.log(`First ball hit by cue ball: ${hitBall.color.name}`);
+                        }
+                    }
+                }
+            }
+        }
+    } // End handleCollision
+
+
+
+    hasRedsRemaining() { // Check if any red balls are still on the table
+        return this.allBalls.some(ball => ball.color.name === 'Red' && !ball.isPotted);
+    }
+
+
+
+    checkShotResult() {
+        const pottedBalls = this.pottedObjBallsOnShot;
+        const ballOn = snookerGame.BallOn;
+        const firstHit = this.firstBallHit;
+
+        let isFoul = false;
+        let turnScore = 0;
+        let message = '';
+        let penaltyPoints = 4;
+
+        // --- Check FOULS --- //
+
+        // -- Cue Bal Potted
+        if(this.cueBallPottedOnShot) {
+            isFoul = true;
+            message = "Foul: Cue ball potted. ";
+            snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+            // snookerGame.endTurn();
+        }
+
+        // -- No Ball Hit
+        else if (!firstHit) {
+            isFoul = true;
+            message = "Foul: No ball hit. ";
+        }
+
+        // -- Wrong Ball Hit First
+        else {
+            let validFirstHit = false;
+
+            // Check if first hit ball matches Ball On
+            if(ballOn === 'Red') {
+                if(firstHit.color.name === 'Red') validFirstHit = true;
+            }
+            else if (ballOn === 'Colour') {
+                if(firstHit.color.name !== 'Red') validFirstHit = true;
+            } else {
+                // When there is no Reds remaining
+                if(firstHit.color.name === ballOn) validFirstHit = true;
+            }
+
+            // Wrong ball hit first - FOUL
+            if(!validFirstHit) {
+                isFoul = true;
+                message = `Foul: You hit (${firstHit.color.name}) first instead of (${ballOn}). `;
+                let valOn = (ballOn === 'Colour' || ballOn === 'Red') ? 1 : snookerGame.getBallValue(ballOn);
+                penaltyPoints = Math.max(4, valOn, firstHit.value);
+            }
+        }
+
+
+        // --- Check Potted Balls & Add Score --- //
+        let nextBallOn = ballOn;
+        let legalPotCount = 0;
+
+        // Only evaluate potted balls if no foul occurred
+        if(!isFoul) {
+            if(pottedBalls.length === 0) {
+                // Legal but no Balls Potted. Change turn
+                message = "No ball potted.";
+                if(ballOn === 'Colour' ) nextBallOn = 'Red'; // After Colour, Ball On goes to Red
+            }
+            // Ball Potted
+            else {
+                for (let ball of pottedBalls) {
+                    let isValidPot = false;
+                    // Check if potted ball matches Ball On
+                    if(ballOn === 'Red') {
+                        if(ball.color.name === 'Red') isValidPot = true;
+                    }
+                    else if (ballOn === 'Colour') {
+                        if(ball.color.name !== 'Red') isValidPot = true;
+                    }
+                    else {
+                        // When there is no Reds remaining
+                        if(ball.color.name === ballOn) isValidPot = true;
+                    }
+
+                    // Check if potted balls are valid and calculate score
+                    if(isValidPot) {
+                        // Note: Multiple reds can be potted
+
+                        turnScore += ball.value;
+                        legalPotCount ++;
+                        if(ballOn !== 'Red' && legalPotCount > 1) {
+                            isFoul = true;
+                            message = "Foul: More than one Colour ball potted";
+                        }
+                    }
+                    else { // Invalid Pot - penalty
+                        isFoul = true;
+                        message = `Foul: Potted (${ball.color.name}) instead of (${ballOn}). `;
+                        penaltyPoints = Math.max(penaltyPoints, ball.value);
+                    }
+                }
+            }
+        } // End no foul check (!isFoul)
+
+
+        // --- Conclude Shot Result --- //
+        if(isFoul) {
+            snookerGame.applyFoul(penaltyPoints, message);
+
+            // After foul, next target is determined by remaining balls
+            if(this.hasRedsRemaining()) {
+                snookerGame.BallOn = 'Red';
+            } 
+            else {
+                if(ballOn !== 'Red' && ballOn !== 'Colour') {
+                    snookerGame.BallOn = 'Yellow'; // Start with Yellow if no Reds
+                } else {
+                    snookerGame.BallOn = ballOn; // Maintain current Ball On
+                }
+            }
+            // Re-spot potted balls after foul
+            snookerGame.ballsToRespot.push(...pottedBalls);
+
+        } 
+        else {
+            // Legal shot - add score
+
+            if(turnScore > 0) {
+                snookerGame.updateScore(turnScore);
+
+                // Update Message
+                const lastName = pottedBalls[pottedBalls.length - 1].color.name;
+                snookerGame.displayMessage(`${lastName} Ball: ${turnScore} points!`);
+
+                if(ballOn === 'Red') {
+                    // Red Potted, next Ball On is Colour
+                    if(this.hasRedsRemaining()) {
+                        snookerGame.BallOn = 'Colour';
+                    } else {
+                        snookerGame.BallOn = 'Yellow'; // No Reds left
+                    }
+
+                } else if (ballOn === 'Colour') {
+                    if(this.hasRedsRemaining()) {
+                        snookerGame.BallOn = 'Red'; // After Colour, Ball On goes to Red
+                        snookerGame.ballsToRespot.push(...pottedBalls); // Respot Colours
+                    } else {
+                        // No Reds remaining, continue with Colours in order
+                        snookerGame.ballsToRespot.push(...pottedBalls); // Respot Colours
+                        snookerGame.BallOn = 'Yellow'; // Next Colour in order
+                    }
+                }
+                else {
+                    const order = ['Yellow', 'Green', 'Brown', 'Blue', 'Pink', 'Black'];
+                    let idX = order.indexOf(ballOn);
+                    if(idX !== -1 && idX < order.length - 1) {
+                        snookerGame.BallOn = order[idX + 1]; // Next Colour in order
+                    } else {
+                        snookerGame.BallOn = 'End Game'; // End of frame
+                        snookerGame.displayMessage("All balls potted! Frame over.");
+                    }
+                }
+            } 
+            // No Balls Potted
+            else {
+                if(ballOn === 'Colour' && !this.hasRedsRemaining()) {
+                    nextBallOn = 'Red'; // After Colour, Ball On goes to Red
+                }
+                snookerGame.displayMessage("No ball potted.");
+            }
+        } // end isFoul
+    } // End checkShotResult
+
+
+
     reSpotBall(pottedBall) {
+
+        if(pottedBall.color.name === 'Red' && !snookerGame.foulCommitted) return; // Reds are not re-spotted unless foul
+
         const ballName = pottedBall.color.name.toUpperCase();
         const originalSpot = this.reSpotPositions[ballName];
         let targetSpot = originalSpot;
+
+
+        // If need to re-spot Red ball, choose random position
+        if(pottedBall.color.name === 'Red') {
+            targetSpot = this.getRandomFeltPosition();
+        }
+
 
         if(!targetSpot) {
             console.error(`No spot defined for ${ballName} ball.`);
@@ -353,7 +567,6 @@ class Balls {
         
         } else {
             // Re-spot at original position
-            console.log(`Re-spotting ${ballName} ball at its original spot.`);
         }
 
         // Create and add the re-spotted ball to the world
@@ -368,7 +581,6 @@ class Balls {
 
         newBall.isPotted = false; // Reset potted status
     }
-
 
 
 
@@ -504,8 +716,6 @@ class Balls {
         );
 
         let allSegments = cueSegments;
-
-
 
         // ---- Object Ball (dashed line) Path Prediction ---- //
         if(lastCollision && lastCollision.type === 'ball') {

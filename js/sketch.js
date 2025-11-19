@@ -41,6 +41,13 @@ function setup() {
         }
     });
 
+    // Detect first collision for rule checking
+    Matter.Events.on(engine, 'collisionStart', function(event) {
+        if(snookerGame.isShotTaken && !snookerBalls.firstBallHit) {
+            snookerBalls.handleCollision(event);
+        }
+    });
+
 
     // Log setup info
     console.log(`Setup complete. Canvas size: ${Game.CANVAS_WIDTH}x${Game.CANVAS_HEIGHT}`);
@@ -50,7 +57,7 @@ function setup() {
 
 
 function draw() {
-    background('#27374d'); // Green felt background
+    background(39, 55, 77); // Dark blue background
 
     // Display header
     snookerGame.displayHeader();
@@ -90,22 +97,27 @@ function draw() {
     }
 
 
-    shotPower.display(); // Display shot power UI
+    shotPower.display(); // Display shot power
 
 
     // ---- Check if all balls have stopped moving ---- //
-    if(!snookerBalls.BallsMoving()) {
+    if(snookerGame.isShotTaken && !snookerBalls.areBallsMoving()) {
 
-        // Re-spot coloured balls
+        snookerBalls.checkShotResult();
+
         if(snookerGame.ballsToRespot.length > 0) {
             for(let ball of snookerGame.ballsToRespot) {
                 snookerBalls.reSpotBall(ball);
             }
-            snookerGame.ballsToRespot = []; // Clear the list after re-spotting
+            snookerGame.ballsToRespot = []; // Clear respot list
         }
 
-        // Reset for next shot
-        snookerGame.isShotTaken = false; // Reset shot taking flag
+        snookerGame.isShotTaken = false; // Reset shot taken flag
+
+        snookerBalls.firstBallHit = null; // Reset first ball hit
+        snookerBalls.pottedObjBallsOnShot = []; // Clear potted balls list
+        snookerBalls.cueBallPottedOnShot = false; // Reset cue ball potted flag
+
         console.log("All balls have stopped moving. Ready for next shot.");
     }
 
@@ -179,7 +191,7 @@ function mousePressed() {
     }
 
 
-    if(snookerGame.isShotTaking) {
+    if(snookerGame.isShotTaken) {
         console.log("Shot already in progress. Please wait for balls to stop moving.");
         return;
     }

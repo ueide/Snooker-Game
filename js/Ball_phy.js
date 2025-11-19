@@ -16,9 +16,10 @@ class Ball {
         this.body = Matter.Bodies.circle(x, y, radius, {
             label: isCueBall ? 'cueBall' : color.name, // Identifier for the ball
             restitution: 0.85, // Bounciness
-            friction: 0.005, // Surface friction
-            frictionAir: 0.005, // Air resistance
-            density: 0.0001, // Mass density
+            friction: 0.02, // Surface friction
+            frictionAir: 0.01, // Air resistance
+            density: 0.001, // Mass density
+            angularDamping: 0.01, // Angular damping
 
             collisionFilter: {
                 group: 0 // Default collision group
