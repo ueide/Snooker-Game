@@ -368,7 +368,6 @@ class Balls {
             isFoul = true;
             message = "Foul: Cue ball potted. ";
             snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
-            // snookerGame.endTurn();
         }
 
         // -- No Ball Hit
@@ -459,10 +458,21 @@ class Balls {
                 snookerGame.BallOn = 'Red';
             } 
             else {
-                if(ballOn !== 'Red' && ballOn !== 'Colour') {
-                    snookerGame.BallOn = 'Yellow'; // Start with Yellow if no Reds
+                const order = Game.COLOR_ORDER;
+                let correctedBallOn = null;
+
+                for(const colorName of order) {
+                    const ballExists = this.allBalls.some(ball => ball.color.name === colorName);
+                    if(ballExists) {
+                        correctedBallOn = colorName;
+                        break;
+                    }
+                }
+                if(correctedBallOn) {
+                    snookerGame.BallOn = correctedBallOn;
                 } else {
-                    snookerGame.BallOn = ballOn; // Maintain current Ball On
+                    snookerGame.BallOn = 'End Game';
+                    snookerGame.displayMessage("All balls potted! Good Job!");
                 }
             }
             // Re-spot potted balls after foul
@@ -495,11 +505,9 @@ class Balls {
                         // No Reds remaining, continue with Colours in order
                         snookerGame.ballsToRespot.push(...pottedBalls); // Respot Colours
                         snookerGame.BallOn = Game.COLOR_ORDER;
-                        //snookerGame.BallOn = 'Yellow'; // Next Colour in order
                     }
                 }
                 else {
-                    //const order = ['Yellow', 'Green', 'Brown', 'Blue', 'Pink', 'Black'];
                     const order = Game.COLOR_ORDER;
                     let idX = order.indexOf(ballOn);
                     if(idX !== -1) {

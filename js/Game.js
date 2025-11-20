@@ -139,7 +139,7 @@ class Game {
 
         // Display break
         text(`Break: ${this.currentBreak}  |  High Break: ${this.highBreak}`,
-            Game.CANVAS_WIDTH / 2 - 160, HEADER_HEIGHT / 2 + 8);
+            Game.CANVAS_WIDTH / 2 - PADDING, HEADER_HEIGHT / 2 + 8);
 
 
         // Draw Highlight -> Ball On
