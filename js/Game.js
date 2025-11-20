@@ -83,7 +83,6 @@ class Game {
         this.foulMessage = '';
         this.isCueBallPlacementMode = true;
         this.ballsToRespot = []; 
-        this.highBreak = 0;
         this.displayMessage('Put the cue ball in play to start the game');
     }
 
@@ -178,7 +177,7 @@ class Game {
     setGameMode(newMode) {
         if(newMode >= 1 && newMode <= 3) {
             this.gameMode = newMode;
-            console.log(`Game mode set to: ${newMode}`);
+            //console.log(`Game mode set to: ${newMode}`);
             this.startGame(); // Restart game on mode change
         } else {
             console.warn(`Invalid game mode: ${newMode}`);

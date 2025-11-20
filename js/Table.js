@@ -154,8 +154,8 @@ class Table {
         // ---- CONSTANTS ---- //
         const wd_f = this.woodFrameThickness;
         const pk_R = this.pocketRadius;
-        const pk_diam = this.pocketDiameter;
-        const pk_OS = this.pocket_OffSet;
+        // const pk_diam = this.pocketDiameter;
+        // const pk_OS = this.pocket_OffSet;
         const cu_w = this.cushionWidth;
         const inlaySize = this.inlay_size;
 

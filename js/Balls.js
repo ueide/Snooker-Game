@@ -116,6 +116,45 @@ class Balls {
         // Clear existing balls
         this.reset();
 
+        //--- Mode 03: Full Random Game ---//
+        if (mode === 3) {
+            // Balls to replace: 1 Yellow, 1 Green, 1 Brown, 1 Blue, 1 Pink, 1 Black, 15 Reds
+            let ballsToPlace = [
+                this.balls_prop.YELLOW, this.balls_prop.GREEN, this.balls_prop.BROWN,
+                this.balls_prop.BLUE, this.balls_prop.PINK, this.balls_prop.BLACK
+            ];
+
+            for (let i = 0; i < 15; i++) { // Add 15 red balls
+                ballsToPlace.push(this.balls_prop.RED);
+            }
+
+            for(let prop of ballsToPlace) {
+                let pos;
+                let overlap;
+
+                do {
+                    overlap = false;
+                    pos = this.getRandomFeltPosition(); // Get random position on felt
+                    
+                    // Check for overlaps with existing balls
+                    for (let existingBall of this.allBalls) {
+                        let d = dist(pos.x, pos.y, existingBall.body.position.x, existingBall.body.position.y);
+
+                        // If overlap detected, set flag to true
+                        if(d < this.ballRadius * 2 + 0.1) { // Small padding to avoid overlaps
+                            overlap = true;
+                            break;
+                        } 
+                    }
+
+                } while (overlap); // Repeat until a non-overlapping position is found
+                this.allBalls.push(new Ball(pos.x, pos.y, this.ballRadius, prop, prop.value));
+            }
+            return; // Exit after initializing mode 3
+        }
+
+
+        //--- MODE 01 and 02 --- //
         // Place Coloured Balls on their spots
         this.allBalls.push(new Ball(this.balls_spot.YELLOW.x, this.balls_spot.YELLOW.y, this.ballRadius, this.balls_prop.YELLOW, 2));
         this.allBalls.push(new Ball(this.balls_spot.GREEN.x, this.balls_spot.GREEN.y, this.ballRadius, this.balls_prop.GREEN, 3));
@@ -133,12 +172,6 @@ class Balls {
         } 
         else if(mode === 2) { // mode 2: Full set of 15 red balls
             for(let i = 0; i < 15; i++) {
-                const pos = this.getRandomFeltPosition(); // Get random position on felt
-                redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
-            }
-        }
-        else if (mode === 3) { // mode 3: Reds are random, Coloured stay on spots
-            for (let i = 0; i < 15; i++) {
                 const pos = this.getRandomFeltPosition(); // Get random position on felt
                 redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
             }
@@ -335,7 +368,7 @@ class Balls {
                         const hitBall = this.allBalls.find(ball => ball.body === otherBody);
                         if(hitBall) {
                             this.firstBallHit = hitBall;
-                            console.log(`First ball hit by cue ball: ${hitBall.color.name}`);
+                            //console.log(`First ball hit by cue ball: ${hitBall.color.name}`);
                         }
                     }
                 }
@@ -555,7 +588,7 @@ class Balls {
 
 
         if(!targetSpot) {
-            console.error(`No spot defined for ${ballName} ball.`);
+            //console.error(`No spot defined for ${ballName} ball.`);
             return;
         }
 
@@ -579,7 +612,7 @@ class Balls {
         if(isSpotOccupied) {
             // Find nearest available position around the original spot
             targetSpot = this.reSpotPositions.BLACK; // Default to black spot if needed
-            console.log(`${ballName} spot occupied. Re-spotting at Black ball spot.`);
+            //console.log(`${ballName} spot occupied. Re-spotting at Black ball spot.`);
         
         } else {
             // Re-spot at original position
@@ -843,6 +876,7 @@ class Balls {
             if(collision.type === 'cushion') { 
                 const normalAngle = collision.normalAngle;
 
+                // Return the absolute angle after reflection
                 if(Math.abs(cos(currentAngle - normalAngle)) > 0.001 &&
                     (normalAngle === 0 || normalAngle === PI)) {
                     // Vertical cushion
@@ -863,6 +897,7 @@ class Balls {
                 currentPos.x += directionVector.x * 2;
                 currentPos.y += directionVector.y * 2;
 
+                // Normalize angle between 0 and TWO_PI
                 currentAngle = (currentAngle % TWO_PI + TWO_PI) % TWO_PI; // Normalize angle
             }
 

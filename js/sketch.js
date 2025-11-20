@@ -1,3 +1,10 @@
+//Candidate Number: RJ0630
+
+// I developed this entire project from scratch.
+// All the ideas, design, user interface, playable functions
+// were created and produced by me.
+// I used the Matter.js, P5.js documentation to learn how to use the libraries.
+
 
 // matter.js module aliases
 var Engine = Matter.Engine,
@@ -60,6 +67,7 @@ function setup() {
         }
     });
 
+
     // Detect first collision for rule checking
     Matter.Events.on(engine, 'collisionStart', function(event) {
         if(snookerGame.isShotTaken && !snookerBalls.firstBallHit) {
@@ -67,11 +75,6 @@ function setup() {
             ball_collision_sound.play();
         }
     });
-
-
-    // Log setup info
-    console.log(`Setup complete. Canvas size: ${Game.CANVAS_WIDTH}x${Game.CANVAS_HEIGHT}`);
-    console.log(`Table position: (${Game.TABLE_X_OFFSET}, ${Game.TABLE_Y_OFFSET}), Size: ${Game.TABLE_WIDTH}x${Game.TABLE_HEIGHT}`);
 
 }
 
@@ -138,18 +141,14 @@ function draw() {
         snookerBalls.pottedObjBallsOnShot = []; // Clear potted balls list
         snookerBalls.cueBallPottedOnShot = false; // Reset cue ball potted flag
 
-        console.log("All balls have stopped moving. Ready for next shot.");
+        //console.log("All balls have stopped moving. Ready for next shot.");
     }
-
-
 
 
     // ---- Draw Prediction Line ---- //
     if(poolCue && poolCue.isLocked && snookerBalls.cueBall && !snookerGame.isShotTaken) {
         snookerBalls.drawPredictedPath(snookerBalls.cueBall, poolCue.lockAngle);
     }
-
-
 
 } // End draw function
 
@@ -202,17 +201,17 @@ function mousePressed() {
             snookerGame.isCueBallPlacementMode = false; // Exit cue ball placement mode
             poolCue.isLocked = false; // Reset cue lock state
 
-            console.log(`Cue ball placed at: (${mouseX}, ${mouseY})`);
+            //console.log(`Cue ball placed at: (${mouseX}, ${mouseY})`);
             return;
         } else {
-            console.log("Invalid cue ball position. Please place within the D-zone and avoid overlapping other balls.");
+            //console.log("Invalid cue ball position. Please place within the D-zone and avoid overlapping other balls.");
             return;
         }
     }
 
 
     if(snookerGame.isShotTaken) {
-        console.log("Shot already in progress. Please wait for balls to stop moving.");
+        //console.log("Shot already in progress. Please wait for balls to stop moving.");
         return;
     }
 
@@ -229,7 +228,7 @@ function mousePressed() {
 
         poolCue.lockAngle = atan2(mouseY - cueBallPos.y, mouseX - cueBallPos.x);
 
-        console.log(`Cue locked at position: (${mouseX}, ${mouseY}) with angle: ${poolCue.lockAngle}`);
+        //console.log(`Cue locked at position: (${mouseX}, ${mouseY}) with angle: ${poolCue.lockAngle}`);
     }
     // ---- END Pool Cue Interaction ---- //
 
@@ -238,7 +237,7 @@ function mousePressed() {
     // ---- Shot Power Interaction ---- //
     if(shotPower.isMouseOver()) {
         shotPower.startDragging(mouseY);
-        console.log("Started dragging shot power.");
+        //console.log("Started dragging shot power.");
     }
     // ---- END Shot Power Interaction ---- //
 
@@ -248,7 +247,7 @@ function mousePressed() {
 function doubleClicked() {
     if(poolCue && poolCue.isLocked) {
         poolCue.isLocked = false;
-        console.log("Cue unlocked.");
+        //console.log("Cue unlocked.");
     }
 }
 
@@ -275,7 +274,7 @@ function mouseReleased() {
     // ---- Shot Power Release ---- //
     if(shotPower.isDragging) {
         shotPower.endDrag();
-        console.log("Shot power set to.");
+        //console.log("Shot power set to.");
     }
     // ---- END Shot Power Release ---- //
 

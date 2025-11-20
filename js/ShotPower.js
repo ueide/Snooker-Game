@@ -40,7 +40,6 @@ class ShotPower {
 
 
         // ---- GAP area ----
-        //fill(180);
         rect(this.xPos, this.yPos + this.height - this.gapHeight, 
                 this.width, this.gapHeight, 0, 0, this.radius, this.radius);
 
@@ -125,7 +124,6 @@ class ShotPower {
         ];
 
         // --- Draw dotted lines and labels ---
-        const textOffset = 8; // Space between line end and text
         const dashLength = 4;
         const spaceLength = 3;
 
@@ -142,15 +140,7 @@ class ShotPower {
                 indicator_y);
             currentx += dashLength + spaceLength;
             }
-
-            // // -- Label 25%, 50%, 75%, 100%
-            // noStroke();
-            // fill(230)
-            // textAlign(LEFT, CENTER);
-            // textSize(12);
-            // text(indicator.label, this.xPos + this.width + textOffset, indicator_y);
         }
-
 
     } // --- END drawIndicator ---
 
@@ -192,6 +182,8 @@ class ShotPower {
         // ---- Remove shadow ----
         drawingContext.shadowBlur = 0;
         drawingContext.shadowColor = 'rgba(0)';
+        drawingContext.shadowOffsetX = 0;
+        drawingContext.shadowOffsetY = 0;
 
         // ---- Cue Tip ----
         fill(240); // reddish brown color
@@ -263,7 +255,7 @@ class ShotPower {
 
         snookerGame.isShotTaken = true; // Mark that a shot has been taken
 
-        console.log(`Shot taken with power: ${this.shotPower.toFixed(2)} (Speed: ${speed.toFixed(2)}) at angle: ${degrees(angle).toFixed(2)}°`);
+        //console.log(`Shot taken with power: ${this.shotPower.toFixed(2)} (Speed: ${speed.toFixed(2)}) at angle: ${degrees(angle).toFixed(2)}°`);
 
         this.shotPower = 0; // Reset shot power after the shot
         //--- END SHOT PHYSICS ----
