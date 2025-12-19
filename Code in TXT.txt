@@ -1,0 +1,2545 @@
+/* Snooker Game - Advanced Trajectory Prediction System
+The application features a mouse-centric interface that emphasises user experience, offering the precision and speed expected for arcade games.
+I developed a two-stage interaction system for the cue: aiming and striking. Users initially rotate the cue around the white ball with the mouse, then click to 'lock' the angle.
+This approach simulates real snooker, where players set their aim before applying power. After locking the aim, users adjust the ShotPower slider to set the strike power.
+This separation helps prevent accidental aim changes during power adjustments, a common problem with keyboard controls.
+
+A solid line shows the cue ball's path, while a light dashed line indicates the hit ball's path. The difference in line weight and style makes it easy to intuitively distinguish between them.
+The project follows strict Object-Oriented Programming (OOP) principles to promote modularity. The central Game class manages the game state, including scoring, rule enforcement like "Ball On" logic, and turn changes.
+Physical behaviour is handled by Matter.js within the Ball class in Ball_phy.js. This class constructor standardises physical attributes such as restitution (bounciness) and frictionAir (air resistance),
+ensuring all ball instances exhibit consistent and realistic physics.
+
+I implemented five different game modes, including a "Cluster" mode (Mode 2) that employs a custom algorithm to spawn groups of red balls without overlapping, verifying distances against existing objects before creating new ones.
+Visual feedback is managed through the animations array in Balls.js. For instance, the Cue Impact animation activates when the cue is struck;
+it calculates the precise contact point on the ball's edge using Math.cos and Math.sin based on poolCue.lockAngle, displaying a localised flash that gradually fades through alpha interpolation.
+
+A particular technical issue was the table's geometry. Standard rectangular colliders couldn’t handle the angular cushions properly.
+In Table.js, I used Matter.Bodies.fromVertices to create custom polygons that match the visual quad() vertices precisely, ensuring balls bounce predictably off the angular cushion noses instead of an invisible bounding box.
+
+Unique Extension: Raycasting Trajectory Prediction. I've developed an exciting Advanced Trajectory Prediction System that really elevates the standard! Unlike basic models that might only display a single line,
+ my system employs a raycasting algorithm in Balls.js (using drawPredictedPath and findclosestcollision) to accurately simulate future physics.
+
+It calculates the trajectory by projecting a vector from the cue ball and carefully considers potential collisions with cushions and other balls, making the prediction more reliable and insightful.
+Cushion Reflection: If the ray strikes a cushion, the code determines the reflection angle using the cushion's normal vector (either vertical or horizontal) and then extends the prediction line.
+
+Object Ball Deflection: Importantly, when the ray hits an object ball, the system determines the "ghost ball" position.
+It then divides the prediction into two parts: a solid line showing the cue ball’s path after impact, and a dashed line representing the object ball’s new trajectory.
+This involves calculating the deflection angle with atan2 based on the point of impact.
+============================================
+*/
+
+
+/* 
+--- Game JS ---
+============================================
+*/
+
+class Game {
+    static CANVAS_WIDTH = 1440;
+    static CANVAS_HEIGHT = 700;
+    static TABLE_WIDTH = 740; 
+    static TABLE_HEIGHT = Game.TABLE_WIDTH/ 2; // Standard snooker table ratio 2:1
+
+    static TABLE_X_OFFSET = (Game.CANVAS_WIDTH - Game.TABLE_WIDTH) / 2; //350
+    static TABLE_Y_OFFSET = (Game.CANVAS_HEIGHT - Game.TABLE_HEIGHT) / 2; //201
+
+    static BALL_INFO = {
+        "Red": {value: 1, order: 0, isColoured: false, penalty: 4},
+        "Yellow": {value: 2, order: 1, isColoured: true, penalty: 2},
+        "Green": {value: 3, order: 2, isColoured: true, penalty: 3},
+        "Brown": {value: 4, order: 3, isColoured: true, penalty: 4},
+        "Blue": {value: 5, order: 4, isColoured: true, penalty: 5},
+        "Pink": {value: 6, order: 5, isColoured: true, penalty: 6},
+        "Black": {value: 7, order: 6, isColoured: true, penalty: 7}
+    }
+
+    static COLOR_ORDER = ["Yellow", "Green", "Brown", "Blue", "Pink", "Black"];
+
+
+
+    constructor() {
+        this.playerScore = 0;
+        this.currentBreak = 0;
+        this.highBreak = 0;
+        this.BallOn = 'Red'; // Start with red ball
+        this.gameMode = 1; // Standard mode by default
+
+        this.isCueBallPlacementMode = true; // Start in cue ball placement mode
+        this.isShotTaken = false; // Track if a shot has been taken
+
+        this.pottedReds = 0; // Track number of potted reds
+        this.consecutiveColoredPots = 0; // Track consecutive colored pots
+        this.foulCommitted = false; // Track if a foul has been committed
+        this.penaltyValue = 0; // Penalty points for fouls
+        this.foulMessage = ''; // Message describing the foul
+        this.ballsToRespot = []; // Coloured balls to respot after being potted
+
+        this.uiMessage ='Put the cue ball in play to start the game'
+        this.uiMessageTimer = 0; // Timer for displaying UI messages
+
+        this.startGame();
+    } // End of constructor
+
+
+
+    getBallValue(name) {
+        if(Game.BALL_INFO[name]) {
+            return Game.BALL_INFO[name].value;
+        }
+        return 0; // Default to 0 for unknown balls
+    }
+
+
+    updateScore(ballValue) {
+        this.playerScore += ballValue;
+        this.currentBreak += ballValue;
+    }
+
+
+    applyFoul(penalty, message) { // Penalty and message
+        this.playerScore -= penalty;
+        this.foulCommitted = true;
+        this.foulMessage = message;
+        this.displayMessage(`${message} (- ${penalty})`);
+        this.currentBreak = 0;
+    }
+
+
+
+    startGame() {
+        // Reset all game variables for a new game
+        this.playerScore = 0; 
+        this.currentBreak = 0; 
+        this.BallOn = 'Red';
+        this.pottedReds = 0;
+        this.consecutiveColoredPots = 0;
+        this.foulCommitted = false;
+        this.penaltyValue = 0;
+        this.foulMessage = '';
+        this.isCueBallPlacementMode = true;
+        this.ballsToRespot = []; 
+        this.displayMessage('Put the cue ball in play to start the game');
+    }
+
+
+
+    getNextColourBall(currentBallName) { // Get next coloured ball in sequence
+        const idX = Game.COLOR_ORDER.indexOf(currentBallName);
+        if(idX !== -1 && idX < Game.COLOR_ORDER.length - 1) {
+            return Game.COLOR_ORDER[idX + 1];
+        }
+        return null;
+    }
+
+
+    endTurn() { // Call this method at the end of a player's turn
+        if(this.currentBreak > this.highBreak) {
+            this.highBreak = this.currentBreak;
+        }
+
+        this.currentBreak = 0;
+        this.consecutiveColoredPots = 0;
+
+        // Reset foul and penalty
+        this.foulCommitted = false;
+        this.penaltyValue = 0;
+    }
+
+
+
+    // render messages
+    displayMessage(msg) {
+        this.uiMessage = msg;
+    }
+
+
+
+    displayHeader() {
+        // Constants
+        const HEADER_HEIGHT = 88;
+        const PADDING = 96;
+
+        // Draw header background
+        noStroke();
+        fill(19, 32, 50);
+        rect(0, 0, Game.CANVAS_WIDTH, HEADER_HEIGHT);
+
+
+        // Display scores
+        fill(210);
+        textSize(22);
+        textAlign(LEFT, CENTER);
+        text(`Player Score: ${this.playerScore}`, PADDING, HEADER_HEIGHT / 2 + 8);
+
+        // Display break
+        text(`Break: ${this.currentBreak}  |  High Break: ${this.highBreak}`,
+            Game.CANVAS_WIDTH / 2 - PADDING, HEADER_HEIGHT / 2 + 8);
+
+
+        // Draw Highlight -> Ball On
+        const HighlightWidth = 164; 
+        const HighlightHeight = 40;
+        const HighlightX = Game.CANVAS_WIDTH - HighlightWidth - PADDING + 24;
+        const HighlightY = (HEADER_HEIGHT - HighlightHeight) / 2 + 5;
+        fill(217); // Highlight background
+        rect( HighlightX - 8, HighlightY + 1, HighlightWidth, HighlightHeight, 40);
+
+        //Ball On
+        fill(0);
+        textSize(18);
+        textAlign(CENTER, CENTER);
+        let displayBallOn = this.BallOn;
+        if(displayBallOn.includes('_')) {
+            displayBallOn = displayBallOn === 'Colour' ? 'Colour' : displayBallOn.replace('_C', ' ');
+        }
+        text(`Ball On: ${displayBallOn}`, Game.CANVAS_WIDTH - PADDING - 64 , 
+            HighlightY + HighlightHeight / 2 + 2);
+
+        
+        // Display Message 
+        if(this.uiMessage) {
+            fill(230);
+            textSize(18);
+            textAlign(CENTER, CENTER);
+            text(this.uiMessage, Game.CANVAS_WIDTH / 2, Game.CANVAS_HEIGHT - 80);
+        }
+
+    }
+
+    setGameMode(newMode) {
+        if(newMode >= 1 && newMode <= 5) {
+            this.gameMode = newMode;
+            //console.log(`Game mode set to: ${newMode}`);
+            this.startGame(); // Restart game on mode change
+        } else {
+            console.warn(`Invalid game mode: ${newMode}`);
+        }
+    }
+
+
+    displayGameMode() {
+        // Constants for positioning
+        const X_start = Game.CANVAS_WIDTH - 220; // X position for text
+        const y_position = 188;
+        const space_between = 32;
+
+        const Y_title = y_position; // Y position for title
+        const Y_press = y_position + 24; // Y position for instructions
+
+        const Y_mode1 = y_position + space_between * 2; // Y position for mode 1
+        const Y_mode2 = y_position + space_between * 3 + 8; // Y position for mode 2
+        const Y_mode3 = y_position + space_between * 4 + 16; // Y position for mode 3
+        const Y_mode4 = y_position + space_between * 5 + 24; // Y position for mode 4
+        const Y_mode5 = y_position + space_between * 6 + 32; // Y position for mode 5
+
+        // Map mode numbers to their Y positions
+        const modeMap_Y = {
+            1: Y_mode1,
+            2: Y_mode2,
+            3: Y_mode3,
+            4: Y_mode4,
+            5: Y_mode5
+        };
+
+
+        // ---- Highlight for selected mode ---- //
+        const HighlightWidth = 140;
+        const HighlightHeight = 32;
+        const HighlightY = modeMap_Y[this.gameMode] - 9;
+
+        noStroke();
+        fill(217); // Highlight background
+        rect(X_start - 16, HighlightY, HighlightWidth, HighlightHeight, 20);
+        // ---- End Highlight ---- //
+
+
+        // ---- Display Mode Selection Text ---- //
+        fill(230);
+        textAlign(LEFT, TOP);
+
+        // Title
+        textSize(16);
+        textStyle(BOLD);
+        text("Game Mode", X_start, Y_title);
+
+        // Instructions
+        textSize(14);
+        textStyle(NORMAL);
+        text("Press a key:", X_start, Y_press);
+
+        // Mode Options
+        textSize(16);
+        const textOptions = [ 
+            {text: "1: Standard", y: Y_mode1, mode: 1 },
+            {text: "2: Cluster", y: Y_mode2, mode: 2 },
+            {text: "3: Practice", y: Y_mode3, mode: 3 },
+            {text: "4: Red Random", y: Y_mode4, mode: 4 },
+            {text: "5: Full Random", y: Y_mode5, mode: 5 }
+        ];
+
+        for(let i = 0; i < textOptions.length; i++) {
+            if(this.gameMode === textOptions[i].mode) {
+                fill(0);
+        } else {
+                fill(230);
+            }
+            text(textOptions[i].text, X_start, textOptions[i].y);
+        }
+        // ---- End Display Mode Selection Text ---- //
+
+    }
+}
+// End of class Game
+
+
+/* 
+--- Table JS ---
+============================================
+*/
+
+class Table {
+
+    constructor() {
+        // Table dimensions and position
+        this.width = Game.TABLE_WIDTH; // 740
+        this.height = Game.TABLE_HEIGHT; // 370
+        this.x = Game.TABLE_X_OFFSET ; //350
+        this.y = Game.TABLE_Y_OFFSET ; //201
+
+        // Ball and pocket dimensions
+        this.ballDiameter = this.width / 36; // 740/36 = ~20.55
+        this.pocketDiameter = this.ballDiameter * 1.5; // ~30.83
+        this.pocketRadius = this.pocketDiameter / 2;
+        this.pocket_OffSet = this.pocketRadius / 2;
+
+        // Frame and cushion dimensions
+        this.woodFrameThickness = 24;
+        this.cushionWidth = 10;
+
+        // Felt - playing surface dimensions
+        this.feltX = this.x + this.cushionWidth;
+        this.feltY = this.y + this.cushionWidth;
+        this.feltWidth = this.width - this.cushionWidth * 2;
+        this.feltHeight = this.height - this.cushionWidth * 2;
+        this.feltC_x = this.feltX + this.feltWidth / 2;
+        this.feltC_y = this.feltY + this.feltHeight / 2;
+
+        // Baulk line and D zone properties
+        this.baulkLineX = this.feltX + this.feltWidth * 0.20 ; // X position
+        this.D_Radius = 64; // Radius of the D
+
+        // Inlay (Dots) Dimensions
+        this.inlay_size = 56;
+        this.inlay_diameter = 5.4;
+
+        // Physical Cushion
+        this.physicalCushion();
+
+        // Pocket positions for reference
+        this.pockets = [
+            { x: this.x + this.pocket_OffSet, y: this.y + this.pocket_OffSet, name: 'TL' }, // Top-Left
+            { x: this.x + this.width / 2, y: this.y + this.pocket_OffSet - 10, name: 'TC' }, // Top-Center
+            { x: this.x + this.width - this.pocket_OffSet, y: this.y + this.pocket_OffSet, name: 'TR' }, // Top-Right
+
+            { x: this.x + this.pocket_OffSet, y: this.y + this.height - this.pocket_OffSet, name:'BL' }, // Bottom-Left
+            { x: this.x + this.width / 2, y: this.y + this.height - this.pocket_OffSet + 10, name: 'BC'}, // Bottom-Center
+            { x: this.x + this.width - this.pocket_OffSet, y: this.y + this.height - this.pocket_OffSet, name: 'BR' } // Bottom-Right
+        ];
+
+    } // End of constructor
+
+
+    physicalCushion() {
+        //The physical cushions are created as Matter.js bodies for collision detection
+        // I used the fromVertices method to create custom shapes for the cushions
+        // keep the same dimensions as the visual cushions drawn in the display() method
+
+        // Create physical cushions using Matter.js
+        const pk_R = this.pocketRadius;
+        const cushionOffset = 8;
+        const cornerGap = pk_R * 2 + cushionOffset;
+        const sideGap = pk_R * 2; // Gap for side cushions
+
+        const cushionsSett = {
+            isStatic: true,
+            restitution: 0.85,
+            friction: 0.05,
+            label: 'cushion'
+        }
+
+        let cushions = []; // Array to hold cushion bodies
+
+        // --- TOP LEFT CUSHIONS --- //
+        let verticesTopLeft = [
+            {x: this.feltX + 8, y: this.y}, // Top-Left
+            {x: this.x + this.width / 2 - sideGap + 20, y: this.y}, // Top-Right
+            {x: this.x + this.width / 2 - sideGap + 2, y: this.feltY}, // Bottom-Right
+            {x: this.feltX + cornerGap - 12, y: this.feltY} // Bottom-Left
+        ];
+        let centerTopLeft = Matter.Vertices.centre(verticesTopLeft);
+        cushions.push(Matter.Bodies.fromVertices(centerTopLeft.x, centerTopLeft.y, [verticesTopLeft], cushionsSett));
+
+
+        // --- TOP RIGHT CUSHIONS --- //
+        let verticesTopRight = [
+            {x: this.x + this.width / 2 + sideGap - 16, y: this.y}, // Top-Left
+            {x: this.x + this.width - cornerGap + 21, y: this.y}, // Top-Right
+            {x: this.x + this.width - cornerGap + 2, y: this.feltY}, // Bottom-Right
+            {x: this.x + this.width / 2 + sideGap, y: this.feltY} // Bottom-Left
+        ];
+        let centerTopRight = Matter.Vertices.centre(verticesTopRight);
+        cushions.push(Matter.Bodies.fromVertices(centerTopRight.x, centerTopRight.y, [verticesTopRight], cushionsSett));
+
+
+        // --- BOTTOM LEFT CUSHIONS --- //
+        let verticesBottomLeft = [
+            {x: this.feltX + 8, y: this.y + this.height}, // Bottom-Left
+            {x: this.x + this.width / 2 - sideGap + 20, y: this.y + this.height}, // Bottom-Right
+            {x: this.x + this.width / 2 - sideGap, y: this.feltY + this.feltHeight}, // Top-Right
+            {x: this.feltX + cornerGap - 10, y: this.feltY + this.feltHeight} // Top-Left
+        ];
+        let centerBottomLeft = Matter.Vertices.centre(verticesBottomLeft);
+        cushions.push(Matter.Bodies.fromVertices(centerBottomLeft.x, centerBottomLeft.y, [verticesBottomLeft], cushionsSett));
+
+
+        // --- BOTTOM RIGHT CUSHIONS --- //
+        let verticesBottomRight = [
+            {x: this.x + this.width / 2 + sideGap - 20, y: this.y + this.height}, // Bottom-Left
+            {x: this.x + this.width - cornerGap + 20, y: this.y + this.height}, // Bottom-Right
+            {x: this.x + this.width - cornerGap - 2, y: this.feltY + this.feltHeight}, // Top-Right
+            {x: this.x + this.width / 2 + sideGap, y: this.feltY + this.feltHeight} // Top-Left
+        ];
+        let centerBottomRight = Matter.Vertices.centre(verticesBottomRight);
+        cushions.push(Matter.Bodies.fromVertices(centerBottomRight.x, centerBottomRight.y, [verticesBottomRight], cushionsSett));
+
+
+        // --- LEFT CUSHIONS --- //
+        let verticesLeft = [
+            {x: this.x, y: this.feltY + cornerGap - 30}, // Top-Left
+            {x: this.feltX, y: this.feltY + cornerGap - 13}, // Top-Right
+            {x: this.feltX, y: this.feltY + this.feltHeight - cornerGap + 12}, // Bottom-Right
+            {x: this.x, y: this.feltY + this.feltHeight - cornerGap + 30} // Bottom-Left
+        ];
+        let centerLeft = Matter.Vertices.centre(verticesLeft);
+        cushions.push(Matter.Bodies.fromVertices(centerLeft.x, centerLeft.y, [verticesLeft], cushionsSett));
+
+
+        // --- RIGHT CUSHIONS --- //
+        let verticesRight = [
+            {x: this.x + this.width, y: this.feltY + cornerGap - 26}, // Top-Right
+            {x: this.x + this.width - this.cushionWidth, y: this.feltY + cornerGap - 12}, // Top-Left
+            {x: this.x + this.width - this.cushionWidth, y: this.feltY + this.feltHeight - cornerGap + 12}, // Bottom-Left
+            {x: this.x + this.width, y: this.feltY + this.feltHeight - cornerGap + 30} // Bottom-Right
+        ];
+        let centerRight = Matter.Vertices.centre(verticesRight);
+        cushions.push(Matter.Bodies.fromVertices(centerRight.x, centerRight.y, [verticesRight], cushionsSett));
+
+
+        // Add all cushions to the Matter.js world
+        Matter.World.add(engine.world, cushions);
+        
+
+    }
+
+
+
+    display () {
+        
+        push();
+        rectMode(CORNER);
+        noStroke();
+
+        // ---- CONSTANTS ---- //
+        const wd_f = this.woodFrameThickness;
+        const pk_R = this.pocketRadius;
+        // const pk_diam = this.pocketDiameter;
+        // const pk_OS = this.pocket_OffSet;
+        const cu_w = this.cushionWidth;
+        const inlaySize = this.inlay_size;
+
+        //---- END CONSTANTS ---- //
+
+
+
+        // ---- TABLE BOARD (wooden frame) ---- //
+        fill(123, 65, 20); // Brown color
+        rect(this.x - wd_f, this.y - wd_f, 
+                this.width + wd_f * 2, this.height + wd_f * 2, 10);
+        // ---- END TABLE BOARD ---- //
+
+
+        // ---- TABLE DETAILS (inlays) ---- //
+        fill(180); // color for inlays
+
+        // Top-left inlay
+        rect(this.x - wd_f, this.y - wd_f, inlaySize, wd_f, 32, 0, 0, 0);
+        rect(this.x - wd_f, this.y - wd_f, wd_f, inlaySize, 32, 0, 0, 0);
+
+        // Top-right inlay
+        rect(this.x + this.width + wd_f - inlaySize, this.y - wd_f, inlaySize, wd_f, 0, 32, 0, 0);
+        rect(this.x + this.width, this.y - wd_f, wd_f, inlaySize, 0, 32, 0, 0);
+
+        // Bottom-left inlay
+        rect(this.x - wd_f, this.y + this.height, inlaySize, wd_f, 0, 0, 0, 32);
+        rect(this.x - wd_f, this.y + this.height + wd_f - inlaySize, wd_f, inlaySize, 0, 0, 0, 32);
+
+        // Bottom-right inlay
+        rect(this.x + this.width + wd_f - inlaySize, this.y + this.height, inlaySize, wd_f, 0, 0, 32, 0);
+        rect(this.x + this.width, this.y + this.height + wd_f - inlaySize, wd_f, inlaySize, 0, 0, 32, 0);
+
+        // Middle Top inlay
+        rect(this.x + (this.width - inlaySize) / 2, this.y - wd_f, inlaySize, wd_f);
+
+        // Middle Bottom inlay
+        rect(this.x + (this.width - inlaySize) / 2, this.y + this.height, inlaySize, wd_f);
+
+        // ---- End TABLE DETAILS ---- //
+
+
+
+        // ---- FELT (the green playing surface) ---- //
+        const feltRadius =  this.feltWidth / 2;  
+
+        //Gradient for the felt
+        const gradient = drawingContext.createRadialGradient(
+            this.feltC_x, this.feltC_y, 50, // x0, y0, r0
+            this.feltC_x, this.feltC_y, feltRadius // x1, y1, r1
+            );
+        
+        // Define gradient color stops
+        gradient.addColorStop(0, 'rgb(39, 131, 2)'); // Center color
+        gradient.addColorStop(1, 'rgba(32, 94, 8, 1)'); // Edge color
+
+        drawingContext.fillStyle = gradient; // Apply gradient to fill style
+        
+        // Felt surface
+        rect(this.feltX - cu_w, this.feltY - cu_w, this.feltWidth + cu_w * 2, this.feltHeight + cu_w * 2);
+        fill(255); // Reset fill to white
+        // ---- END FELT ---- //
+
+
+
+        // ---- D-ZONE AND BAULK LIEN (white lines) ---- //
+        stroke(200, 180); // Light gray // color and transparency
+        strokeWeight(2);
+        noFill();
+
+        // Baulk Line
+        line(this.baulkLineX, this.feltY, this.baulkLineX, this.feltY + this.feltHeight);
+
+        // D Zone
+        const D_centerY = this.feltC_y;
+        arc(
+            this.baulkLineX,
+            D_centerY,
+            this.D_Radius * 2,
+            this.D_Radius * 2,
+            HALF_PI, -HALF_PI // From 90 degrees to -90 degrees
+        );
+        noStroke(); 
+        // ---- END TABLE MARKINGS ---- //
+
+
+
+        // ---- CUSHION (the light green part) ---- //
+
+        // Draw the 6 Cushions 
+        fill(73, 154, 12); // Lighter green for cushions
+        const cushionOffset = 8;
+        const cornerGap = pk_R * 2 + cushionOffset;
+        const sideGap = pk_R * 2; // Gap for side cushions
+
+        // -- Top-Left Cushion
+        // Cushion shadows - TOP
+        drawingContext.shadowBlur = 6;
+        drawingContext.shadowColor = 'rgba(26, 24, 24, 0.6)';
+        drawingContext.shadowOffsetY = 2;
+
+        quad(
+            this.feltX + 10, this.y, // Top-Left
+            this.x + this.width / 2 - sideGap + 18, this.y, // Top-Right
+            this.x + this.width / 2 - sideGap + 2, this.feltY, // Bottom-Right
+            this.feltX + cornerGap - 12, this.feltY // Bottom-Left
+        )
+        // -- Top-Right Cushion
+        quad(
+            this.x + this.width / 2 + sideGap - 18, this.y, // Top-left
+            this.x + this.width - cornerGap + 18, this.y, // Top-Right
+            this.x + this.width - cornerGap + 2, this.feltY, // Bottom-Right
+            this.x + this.width / 2 + sideGap, this.feltY // Bottom-left
+        )
+
+        // -- Bottom-Left Cushion
+        // Cushion shadows - BOTTOM
+        drawingContext.shadowOffsetY = -2;
+        quad(
+            this.feltX + 10, this.y + this.height, // Bottom-Left
+            this.x + this.width / 2 - sideGap + 18, this.y + this.height, // Bottom-Right
+            this.x + this.width / 2 - sideGap, this.feltY + this.feltHeight, // Top-Right
+            this.feltX + cornerGap - 10, this.feltY + this.feltHeight // Top-Left
+        )
+        // -- Bottom-Right Cushion
+        quad(
+            this.x + this.width / 2 + sideGap - 18, this.y + this.height, // Bottom-Left
+            this.x + this.width - cornerGap + 18, this.y + this.height, // Bottom-Right
+            this.x + this.width - cornerGap - 2, this.feltY + this.feltHeight, // Top-Right
+            this.x + this.width / 2 + sideGap, this.feltY + this.feltHeight // Top-Left
+        )
+
+        // -- Left Cushion
+        // Cushion shadows - LEFT
+        drawingContext.shadowOffsetX = 1;
+        drawingContext.shadowOffsetY = 0;
+        quad(
+            this.x, this.feltY + cornerGap - 28, // Top-Left
+            this.feltX, this.feltY + cornerGap - 12, // Top-Right
+            this.feltX, this.feltY + this.feltHeight - cornerGap + 12, // Bottom-Right
+            this.x, this.feltY + this.feltHeight - cornerGap + 28 // Bottom-Left
+        )
+        // -- Right Cushion
+        // Cushion shadows - RIGHT
+        drawingContext.shadowOffsetX = -1;
+        quad(
+            this.x + this.width, this.feltY + cornerGap - 28 , // Top-Right
+            this.x + this.width - cu_w, this.feltY + cornerGap - 12, // Top-Left
+            this.x + this.width - cu_w, this.feltY + this.feltHeight - cornerGap + 12, // Bottom-Left
+            this.x + this.width, this.feltY + this.feltHeight - cornerGap + 28// Bottom-Right
+        )
+
+        // Turn off shadows
+        drawingContext.shadowBlur = 0;
+        drawingContext.shadowColor = 'rgba(0, 0, 0, 0)';
+
+        // ---- END CUSHION ---- //
+
+
+
+        // ---- POCKETS (black holes) ---- //
+        this.drawPockets();
+        // ---- END POCKETS ---- //
+
+
+
+        // ---- TABLE INLAYS (silver dots) ---- //
+        fill(180); // Silver color for dots
+
+        const numDots = 6;
+        const gapFraction = this.width / (numDots + 1);
+        const topDot_y = this.y - wd_f / 2;
+        const bottomDot_y = this.y + this.height + wd_f / 2;
+        const dot_Diam = this.inlay_diameter;
+
+
+        // Draw dots
+        for (let i = 1; i <= numDots; i++) {
+            const dotX = this.x + i * gapFraction;
+
+            // Top edge dot
+            circle(dotX, topDot_y, dot_Diam);
+            // Bottom edge dot
+            circle(dotX, bottomDot_y, dot_Diam);
+        }
+
+        const numDotsSide = 3;
+        const gapFractionSide = this.height / (numDotsSide + 1);
+        const leftDot_x = this.x - wd_f / 2;
+        const rightDot_x = this.x + this.width + wd_f / 2;
+
+        for (let i = 1; i <= numDotsSide; i++) {
+            const dotY = this.y + gapFractionSide * i;
+            circle(leftDot_x, dotY, dot_Diam); // Left edge dot
+            circle(rightDot_x, dotY, dot_Diam); // Right edge dot
+        }
+        // ---- END TABLE DOTS ---- //
+
+
+        pop();
+    } // End of display method
+
+
+
+    // Check if a point (x, y) with a given ballRadius is inside the D zone
+    isInsideDZone(x, y) { 
+        const D_centerY = this.feltC_y;
+        const D_Radius = this.D_Radius;
+        const baulkLineX = this.baulkLineX;
+
+        // Calculate distance from point to center of D arc
+        const distanceToDCenter = dist(x, y, baulkLineX, D_centerY);
+
+        // Check if the point is behind the baulk line and within the D arc
+        const isBehindBaulkLine = x <= baulkLineX;
+        const isWithinArc = distanceToDCenter <= D_Radius;
+
+        // Return true if both conditions are met
+        return isBehindBaulkLine && isWithinArc
+    }
+
+
+
+    isBallInPocket(ball) {
+        // Check if the ball is in any pocket
+        const ballPos = ball.body.position;
+        const pocketDectRadius = this.pocketRadius * 1.2; // Detection radius
+
+        for(let pocket of this.pockets) {
+            // Calculate distance between ball and pocket
+            const distanceToPocket = dist(ballPos.x, ballPos.y, pocket.x, pocket.y);
+            if(distanceToPocket < pocketDectRadius) {
+                return pocket; // Return the name of the pocket
+            }
+        }
+        return null; // Ball is not in any pocket
+    }
+
+
+
+    drawPockets() {
+        push();
+        noStroke();
+        fill(18);
+
+        for(let pocket of this.pockets) {
+            circle(pocket.x, pocket.y, this.pocketDiameter);
+        }
+        pop();
+    }
+}
+
+
+/* 
+--- Ball_phy JS ---
+============================================
+*/
+
+/* Here is the physics code for the BALL appled to all the balls in the game */
+
+class Ball {
+
+    constructor(x, y, radius, color, value, isCueBall = false) {
+        this.radius = radius;
+        this.diameter = radius * 2;
+        this.color = color;
+        this.value = value;
+        this.isCueBall = isCueBall;
+        this.inPocket = false;
+        this.isPotted = false;
+
+        // ---- Matter.js physics body ----
+        this.body = Matter.Bodies.circle(x, y, radius, {
+            label: isCueBall ? 'cueBall' : color.name, // Identifier for the ball
+            // Physics tuned for smoother snooker-like behaviour
+            restitution: 0.94,        // Nearly elastic collisions between balls
+            friction: 0.01,           // Surface friction (contact)
+            frictionStatic: 0.01,     // Static friction for initial contact
+            frictionAir: 0.0040,      // Rolling resistance approximation (global)
+            density: 0.0001,           // Mass density
+
+            collisionFilter: {
+                group: 0 // Default collision group
+            }
+        })
+
+        // Add the ball to the Matter.js world
+        Matter.World.add(engine.world, this.body); // Add ball to the physics world
+
+    } // end constructor
+
+
+
+    display() {
+
+        if(this.isPotted) return; // Don't display if potted
+
+        // Get position and angle from Matter.js body
+        const pos = this.body.position;
+        const angle = this.body.angle;
+
+        push();
+        translate(pos.x, pos.y);
+        rotate(angle);
+
+        // Draw the ball
+        noStroke();
+        fill(this.color.rgb);
+        circle(0, 0, this.diameter);
+
+        // Effects for 3D look
+        fill(255, 180);
+        circle(-this.radius * 0.3, -this.radius * 0.3, this.radius * 0.4);
+
+        pop();
+
+    } // end display
+
+}
+
+
+/* 
+--- Balls JS ---
+============================================
+*/
+/* Here is the code for all the BALLS in the game */
+// The Balls class will manage the properties and behaviors of the balls used in the game.
+
+class Balls {
+
+    constructor(table) {
+
+        // Reference to the table object
+        this.table = table;
+        this.allBalls = [];
+        this.cueBall = null;
+        this.isCueBallPlaced = false; 
+        this.ballRadius = this.table.ballDiameter / 2;
+
+        this.pottedObjBallsOnShot = [];
+        this.cueBallPottedOnShot = false;
+        this.firstBallHit = null; // Track the first ball hit by the cue ball
+        // Visual animations (cue impact, pocket entry)
+        this.animations = [];
+
+        this.clusterGap = 0.5;
+
+        // Rolling physics tuning (practice-proven defaults)
+        this.rollingFrictionCoeff = 0.0009;   // Per ms; higher = slows quicker
+        this.angularFrictionCoeff = 0.0015;   // Per ms; higher = faster spin decay
+        this.linearStopThreshold = 0.02;      // Below this speed, snap to rest
+        this.angularStopThreshold = 0.02;     // Below this spin, snap to rest
+
+        this.setClusterGap = (gap) => {
+            const g = Number(gap);
+            if (!isNaN(g)) {
+                this.clusterGap = Math.max(0, Math.min(8, g));
+            }
+        };
+
+
+        // Define the properties for each type of ball
+        this.balls_prop = {
+            CUE: { name: 'White', value: 0, rgb: [255, 255, 240] },
+            RED: { name: 'Red', value: 1, rgb: [235, 0, 7] },
+            YELLOW: { name: 'Yellow', value: 2, rgb: [235, 219, 6] },
+            GREEN: { name: 'Green', value: 3, rgb: [65, 226, 6] },
+            BROWN: { name: 'Brown', value: 4, rgb: [88, 57, 39] },
+            BLUE: { name: 'Blue', value: 5, rgb: [0, 20, 219] },
+            PINK: { name: 'Pink', value: 6, rgb: [222, 120, 204] },
+            BLACK: { name: 'Black', value: 7, rgb: [10, 10, 10] },
+
+            //Ball On: Displayed in header
+            COLOUR: { name: 'Colour', value: null, rgb: [255, 255, 255] }
+        };
+
+        // Starting positions for each ball on the table
+        this.balls_spot = {
+            BLACK: {x: table.feltX + table.feltWidth * (1 - 0.09075), y: table.feltC_y },
+            PINK: {x: table.feltC_x + table.feltWidth * 0.20, y: table.feltC_y },
+            BLUE: {x: table.feltC_x, y: table.feltC_y },
+            BROWN: {x: table.baulkLineX, y: table.feltC_y },
+            YELLOW: {x: table.baulkLineX, y: table.feltC_y - table.D_Radius},
+            GREEN: {x: table.baulkLineX, y: table.feltC_y + table.D_Radius},
+
+            CUE_DEFAULT: {x: table.feltX + table.feltWidth * 0.1, y: table.feltC_y},
+
+            RED_APEX: {x: table.feltC_x + table.feltWidth * 0.232, y: table.feltC_y}, // Apex of red triangle
+        };
+
+
+        // Re-spot coloured balls after they are potted
+        this.reSpotPositions = {
+            YELLOW: this.balls_spot.YELLOW,
+            GREEN: this.balls_spot.GREEN,
+            BROWN: this.balls_spot.BROWN,
+            BLUE: this.balls_spot.BLUE,
+            PINK: this.balls_spot.PINK,
+            BLACK: this.balls_spot.BLACK,
+        };
+
+        // Initialize all balls and store them in allBalls array
+        this.initializeBalls(1); // Start with 1 red ball for simplicity
+
+    } // End of constructor
+
+
+
+    // Remove all balls from the world and reset the array
+    reset() {
+        for (let ball of this.allBalls) {
+            Matter.World.remove(engine.world, ball.body);
+        }
+
+        this.allBalls = [];
+        this.isCueBallPlaced = false;
+    }
+
+
+
+    // Calculate positions for a pyramid of red balls
+    getRedPyramidPositions(startSpot) {
+        let positions = [];
+        const b_radius = this.ballRadius;
+        const gap = b_radius * 2 + 0.5; // Minimum gap between balls
+        const trinagleHeight = Math.sqrt(3) * gap / 2;
+
+        // Row 1
+        positions.push({x: startSpot.x, y: startSpot.y});
+
+        // Row 2 to 5
+        for (let row = 1; row < 5; row++) {
+            const numBallsinRow = row + 1;
+            const rowX = startSpot.x + trinagleHeight * row;
+            const rowYStart = startSpot.y - (gap * (numBallsinRow - 1) / 2);
+            for (let i = 0; i < numBallsinRow; i++) {
+                const rowY = rowYStart + i * gap;
+                positions.push({x: rowX, y: rowY} );
+            }
+        }
+        return positions;
+    }
+
+
+
+    getRandomFeltPosition() {
+        const padding = this.ballRadius * 2;
+        return {
+            x: random(this.table.feltX + padding, this.table.feltX + this.table.feltWidth - padding),
+            y: random(this.table.feltY + padding, this.table.feltY + this.table.feltHeight - padding)
+        };
+    }
+
+
+
+    initializeBalls(mode) {
+
+        // Clear existing balls
+        this.reset();
+
+        //--- Mode 05: Full Random Game ---//
+        if (mode === 5) {
+            // Balls to replace: 1 Yellow, 1 Green, 1 Brown, 1 Blue, 1 Pink, 1 Black, 15 Reds
+            let ballsToPlace = [
+                this.balls_prop.YELLOW, this.balls_prop.GREEN, this.balls_prop.BROWN,
+                this.balls_prop.BLUE, this.balls_prop.PINK, this.balls_prop.BLACK
+            ];
+
+            for (let i = 0; i < 15; i++) { // Add 15 red balls
+                ballsToPlace.push(this.balls_prop.RED);
+            }
+
+            for(let prop of ballsToPlace) {
+                let pos;
+                let overlap;
+
+                do {
+                    overlap = false;
+                    pos = this.getRandomFeltPosition(); // Get random position on felt
+                    
+                    // Check for overlaps with existing balls
+                    for (let existingBall of this.allBalls) {
+                        let d = dist(pos.x, pos.y, existingBall.body.position.x, existingBall.body.position.y);
+
+                        // If overlap detected, set flag to true
+                        if(d < this.ballRadius * 2 + 0.1) { // Small padding to avoid overlaps
+                            overlap = true;
+                            break;
+                        } 
+                    }
+
+                } while (overlap); // Repeat until a non-overlapping position is found
+                this.allBalls.push(new Ball(pos.x, pos.y, this.ballRadius, prop, prop.value));
+            }
+            return; // Exit after initializing mode 5
+        }
+
+
+        //--- MODE 01, 02, 03, and 04 --- //
+        // Place Coloured Balls on their spots
+        this.allBalls.push(new Ball(this.balls_spot.YELLOW.x, this.balls_spot.YELLOW.y, this.ballRadius, this.balls_prop.YELLOW, 2));
+        this.allBalls.push(new Ball(this.balls_spot.GREEN.x, this.balls_spot.GREEN.y, this.ballRadius, this.balls_prop.GREEN, 3));
+        this.allBalls.push(new Ball(this.balls_spot.BROWN.x, this.balls_spot.BROWN.y, this.ballRadius, this.balls_prop.BROWN, 4));
+        this.allBalls.push(new Ball(this.balls_spot.BLUE.x, this.balls_spot.BLUE.y, this.ballRadius, this.balls_prop.BLUE, 5));
+        this.allBalls.push(new Ball(this.balls_spot.PINK.x, this.balls_spot.PINK.y, this.ballRadius, this.balls_prop.PINK, 6));
+        this.allBalls.push(new Ball(this.balls_spot.BLACK.x, this.balls_spot.BLACK.y, this.ballRadius, this.balls_prop.BLACK, 7));
+
+        const redBalls = [];
+        if(mode === 1) { // mode 1: Standard - Red ball pyramid
+            const redPositions = this.getRedPyramidPositions(this.balls_spot.RED_APEX); // Pyramid apex at Pink spot
+            for (let pos of redPositions) {
+                redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
+            }
+        } 
+        else if(mode === 2) { // mode 2: Cluster (1 center + 4 around)
+            const clusters = 3; // 15 reds = 3 clusters of 5
+            const spacing = this.ballRadius * 2 + this.clusterGap; // Safety spacing between balls in cluster
+
+            // Safe margins so outer balls stay inside felt
+            const marginX = spacing + this.ballRadius + 1;
+            const marginY = spacing + this.ballRadius + 1;
+
+            const getRandomCenter = () => ({
+                x: random(this.table.feltX + marginX, this.table.feltX + this.table.feltWidth - marginX),
+                y: random(this.table.feltY + marginY, this.table.feltY + this.table.feltHeight - marginY)
+            });
+
+            for(let c = 0; c < clusters; c++) {
+                let placed = false;
+                for(let attempt = 0; attempt < 80 && !placed; attempt++) {
+                    const center = getRandomCenter();
+
+                    // Define 5-ball cross: center plus 4 cardinals
+                    const positions = [
+                        {x: center.x, y: center.y},
+                        {x: center.x + spacing, y: center.y},
+                        {x: center.x - spacing, y: center.y},
+                        {x: center.x, y: center.y + spacing},
+                        {x: center.x, y: center.y - spacing}
+                    ];
+
+                    // Validate boundaries and overlaps vs existing balls and already scheduled reds
+                    let invalid = false;
+                    for(const p of positions) {
+                        // Boundary check
+                        if(p.x < this.table.feltX + this.ballRadius ||
+                            p.x > this.table.feltX + this.table.feltWidth - this.ballRadius ||
+                            p.y < this.table.feltY + this.ballRadius ||
+                            p.y > this.table.feltY + this.table.feltHeight - this.ballRadius) { invalid = true; break; }
+
+                        // Overlap vs coloured and previously placed reds
+                        for(const existing of this.allBalls) {
+                            const d1 = dist(p.x, p.y, existing.body.position.x, existing.body.position.y);
+                            if(d1 < this.ballRadius * 2 + 0.1) { invalid = true; break; }
+                        }
+                        if(invalid) break;
+                        for(const r of redBalls) {
+                            const d2 = dist(p.x, p.y, r.body.position.x, r.body.position.y);
+                            if(d2 < this.ballRadius * 2 + 0.1) { invalid = true; break; }
+                        }
+                        if(invalid) break;
+                    }
+
+                    if(!invalid) {
+                        for(const p of positions) {
+                            redBalls.push(new Ball(p.x, p.y, this.ballRadius, this.balls_prop.RED, 1));
+                        }
+                        placed = true;
+                    }
+                }
+            }
+        }
+        else if(mode === 3) { // mode 3: Practice (15 reds pyramid)
+            // Same as standard mode BUT ONLY RED BALLS ARE THE PREDICTION LINES
+            const redPositions = this.getRedPyramidPositions(this.balls_spot.RED_APEX);
+            for (let pos of redPositions) {
+                redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
+            }
+        }
+        else if(mode === 4) { // mode 4: Red Random - 15 random red balls
+            for(let i = 0; i < 15; i++) {
+                const pos = this.getRandomFeltPosition(); // Get random position on felt
+                redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
+            }
+        }
+
+        this.allBalls.push(...redBalls); // Add red balls to allBalls array
+    };
+
+
+    // ---- Animations API ---- //
+    addCueImpact(x, y) {
+        this.animations.push({
+            type: 'cueImpact', x, y, start: millis(), duration: 220
+        });
+    }
+
+    addPocketEntry(x, y, color) {
+        this.animations.push({
+            type: 'pocketEntry', x, y, start: millis(), duration: 400,
+            rgb: color && color.rgb ? color.rgb : [255, 255, 255]
+        });
+    }
+
+    drawAnimations() {
+        if(!this.animations.length) return;
+        const now = millis();
+        for(let i = this.animations.length - 1; i >= 0; i--) {
+            const a = this.animations[i];
+            const t = now - a.start;
+            if(t > a.duration) { this.animations.splice(i, 1); continue; }
+            const p = t / a.duration; // 0..1
+
+            if(a.type === 'cueImpact') {
+                const r = this.ballRadius * (0.4 + 1.2 * p);
+                const alpha = 220 * (1 - p);
+                push(); noFill();
+                stroke(240, 240, 240, alpha);
+                strokeWeight(2.2 - 1.6 * p);
+                circle(a.x, a.y, r * 2);
+                pop();
+            }
+            else if(a.type === 'pocketEntry') {
+                const [cr, cg, cb] = a.rgb;
+                const r = this.ballRadius * (0.6 + 2.0 * p);
+                const alpha = 200 * (1 - p);
+                push(); noFill();
+                stroke(cr, cg, cb, alpha);
+                strokeWeight(2);
+                circle(a.x, a.y, r * 2);
+                // Subtle star burst
+                stroke(cr, cg, cb, alpha * 0.8);
+                const rays = 6;
+                for(let k = 0; k < rays; k++) {
+                    const ang = k * TWO_PI / rays;
+                    const len = this.ballRadius * (0.6 + 1.4 * p);
+                    line(a.x, a.y, a.x + cos(ang) * len, a.y + sin(ang) * len);
+                }
+                pop();
+            }
+        }
+    }
+
+
+    // Apply rolling resistance and snap tiny velocities to zero for smooth stops
+    applyRollingFriction() {
+        const delta = (engine && engine.timing && engine.timing.delta) ? engine.timing.delta : 16.666;
+        const linDecay = Math.max(0, 1 - this.rollingFrictionCoeff * delta);
+        const angDecay = Math.max(0, 1 - this.angularFrictionCoeff * delta);
+
+        for (let ball of this.allBalls) {
+            if (ball.isPotted) continue;
+
+            const vx = ball.body.velocity.x;
+            const vy = ball.body.velocity.y;
+            const speed = Math.hypot(vx, vy);
+
+            if (speed > this.linearStopThreshold) {
+                const scale = linDecay;
+                Matter.Body.setVelocity(ball.body, { x: vx * scale, y: vy * scale });
+            } else {
+                Matter.Body.setVelocity(ball.body, { x: 0, y: 0 });
+            }
+
+            const av = ball.body.angularVelocity;
+            if (Math.abs(av) > this.angularStopThreshold) {
+                Matter.Body.setAngularVelocity(ball.body, av * angDecay);
+            } else {
+                Matter.Body.setAngularVelocity(ball.body, 0);
+            }
+        }
+    }
+
+
+
+    display() {
+        // ---- Display all balls ---- //
+        for (let ball of this.allBalls) {
+            ball.display();
+        }
+        // ---- End display all balls ---- //
+
+
+
+        // ---- Predicted Path for Balls ---- //
+        if(!snookerGame.isShotTaken && this.cueBall && !snookerGame.isCueBallPlacementMode) {
+
+            // Get the coordinates of the cue ball
+            const cueBallPos = this.cueBall.body.position;
+            let aimAngle;
+            if(poolCue.isLocked) {
+            aimAngle = poolCue.lockAngle;
+            } else {
+                // when unlocked, aim towards mouse position
+                aimAngle = atan2(mouseY - cueBallPos.y, mouseX - cueBallPos.x);
+            }
+
+            // Predict the path of the cue ball
+            const predictedPath = this.drawPredictedPath(this.cueBall, aimAngle);
+
+            push(); // First push: solid line
+            for(let i = 0; i < predictedPath.length; i++) {
+                const segment = predictedPath[i];
+
+                // Draw White ball path (solid line)
+                if (segment.type.startsWith ('cue_')) {
+                    stroke(240, 240, 240, 150);
+                    strokeWeight(2);
+                    line(segment.start.x, segment.start.y, segment.end.x, segment.end.y);
+                }
+                // Coloured balls path after hit (dashed line)
+                else if (segment.type.startsWith('object_ball_')) {
+                    // Practice mode (3): show dashed path only for RED object balls
+                    if (snookerGame.gameMode === 3) {
+                        if (!segment.objectBallName || segment.objectBallName !== 'Red') {
+                            continue;
+                        }
+                    }
+                    const centerBall = segment.start;
+                    const deflectionAngle = segment.angle;
+                    const endPos = segment.end;
+
+                    const actualLength = dist(centerBall.x, centerBall.y, endPos.x, endPos.y);
+
+                    push(); // Second push: dashed line
+                    stroke(240, 240, 240, 150);
+                    strokeWeight(2);
+
+                    // Draw dashed line for deflected ball path
+                    const dashLength = 4;
+                    const gapLength = 6;
+                    const segmentStep = dashLength + gapLength;
+
+                    let startX = centerBall.x;
+                    let startY = centerBall.y;
+
+                    for(let currentTravel = 0; currentTravel < actualLength; currentTravel += segmentStep) {
+                        let x1 = startX + cos(deflectionAngle) * currentTravel; // Starting point of dash
+                        let y1 = startY + sin(deflectionAngle) * currentTravel; // Starting point of dash
+                        let x2 = startX + cos(deflectionAngle) * Math.min(currentTravel + dashLength, actualLength); // End point of dash
+                        let y2 = startY + sin(deflectionAngle) * Math.min(currentTravel + dashLength, actualLength); // End point of dash
+
+                        line(x1, y1, x2, y2); // Dashed Line segment
+                    }
+                    pop(); // End second push
+                }
+            }
+            pop(); // End first push
+        }
+
+        // ---- Overlay animations (cue impact, pocket entry) ---- //
+        this.drawAnimations();
+    }
+
+
+
+    // Place the cue ball at specified coordinates
+    placeCueBall(x, y) {
+        const cueProps = this.balls_prop.CUE;
+
+        if(this.cueBall) {
+            Matter.World.remove(engine.world, this.cueBall.body);
+            // Remove existing cue ball from allBalls array
+            this.allBalls = this.allBalls.filter(ball => ball !== this.cueBall);
+        }
+
+        //Create new cue ball at specified position
+        this.cueBall = new Ball(x, y, this.ballRadius, cueProps, 0, true);
+        this.allBalls.push(this.cueBall);
+
+        //Reset physics properties
+        Matter.Body.setVelocity(this.cueBall.body, {x: 0, y: 0});
+        Matter.Body.setAngularVelocity(this.cueBall.body, 0);
+
+        this.isCueBallPlaced = true;
+    }
+
+
+
+    displayCueBallHand(){
+        // Display semi-transparent cue ball at mouse position during placement
+        push();
+        noStroke();
+        const color = this.balls_prop.CUE.rgb;
+
+        fill(color[0], color[1], color[2], 200);
+        circle(mouseX, mouseY, this.ballRadius * 2);
+        pop();
+    }
+
+
+
+    areBallsMoving() { 
+        const movimentThreshold = 0.001; // Velocity threshold to consider ball as moving
+        const angularThreshold = 0.01; // Angular velocity threshold
+
+        for(let ball of this.allBalls) {
+            if(ball.isPotted) continue; // Skip potted balls
+
+            const velX = ball.body.velocity.x;
+            const velY = ball.body.velocity.y;
+            const angularVel = ball.body.angularVelocity;
+
+            const speed = Math.sqrt(velX * velX + velY * velY);
+            if(speed > movimentThreshold || Math.abs(angularVel) > angularThreshold) {
+                return true; // At least one ball is still moving
+            }
+        }
+        
+        return false; // All balls are stationary
+
+    }
+
+
+
+    checkBallsInPockets() { // Check and handle balls that have been potted
+        for (let i = this.allBalls.length - 1; i >= 0; i--) {
+            let ball = this.allBalls[i];
+
+            if(ball.isPotted) continue; // Skip already potted balls
+
+            // Check if ball is in any pocket
+            const pocked = this.table.isBallInPocket(ball);
+            if(pocked) {
+                // Mark ball as potted
+                ball.isPotted = true;
+
+                // Sounds effect
+                on_pocket_sound.play();
+
+                // Pocket entry animation (use pocket position)
+                this.addPocketEntry(pocked.x, pocked.y, ball.color);
+
+                // Remove ball from physics world
+                Matter.World.remove(engine.world, ball.body);
+
+                // If it's a coloured ball, re-spot it
+                if(ball.isCueBall) {
+                    this.cueBallPottedOnShot = true;
+                    this.allBalls.splice(i, 1);
+                    this.cueBall = null;
+                    this.isCueBallPlaced = false;
+
+                } else {
+                    // Track potted object balls for shot result checking
+                    this.pottedObjBallsOnShot.push(ball);
+                }
+                
+            }
+        }
+    }
+
+
+
+    handleCollision(event) { // Track first ball hit by cue ball
+        const pairs = event.pairs;
+
+        for(let i = 0; i < pairs.length; i++) {
+            const bodyA = pairs[i].bodyA; // First body in collision
+            const bodyB = pairs[i].bodyB; // Second body in collision
+
+            let otherBody = null;
+            // If cue ball is involved in the collision
+            if(bodyA.label === 'cueBall') otherBody = bodyB;
+            else if(bodyB.label === 'cueBall') otherBody = bodyA;
+
+            if(otherBody) {
+                // Find the ball object corresponding to otherBody
+                if(otherBody.label !== 'cushion' && otherBody.label !== 'pocket') {
+                    if(!this.firstBallHit) {
+                        const hitBall = this.allBalls.find(ball => ball.body === otherBody);
+                        if(hitBall) {
+                            this.firstBallHit = hitBall;
+                            //console.log(`First ball hit by cue ball: ${hitBall.color.name}`);
+                        }
+                    }
+                }
+            }
+        }
+    } // End handleCollision
+
+
+
+    hasRedsRemaining() { // Check if any red balls are still on the table
+        return this.allBalls.some(ball => ball.color.name === 'Red' && !ball.isPotted);
+    }
+
+
+
+    checkShotResult() {
+        const pottedBalls = this.pottedObjBallsOnShot;
+        const ballOn = snookerGame.BallOn;
+        const firstHit = this.firstBallHit;
+
+        let isFoul = false;
+        let turnScore = 0;
+        let message = '';
+        let penaltyPoints = 4;
+
+        // --- Check FOULS --- //
+
+        // -- Cue Bal Potted
+        if(this.cueBallPottedOnShot) {
+            isFoul = true;
+            message = "Foul: Cue ball potted. ";
+            snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+        }
+
+        // -- No Ball Hit
+        else if (!firstHit) {
+            isFoul = true;
+            message = "Foul: No ball hit. ";
+        }
+
+        // -- Wrong Ball Hit First
+        else {
+            let validFirstHit = false;
+
+            // Check if first hit ball matches Ball On
+            if(ballOn === 'Red') {
+                if(firstHit.color.name === 'Red') validFirstHit = true;
+            }
+            else if (ballOn === 'Colour') {
+                if(firstHit.color.name !== 'Red') validFirstHit = true;
+            } else {
+                // When there is no Reds remaining
+                if(firstHit.color.name === ballOn) validFirstHit = true;
+            }
+
+            // Wrong ball hit first - FOUL
+            if(!validFirstHit) {
+                isFoul = true;
+                message = `Foul: You hit (${firstHit.color.name}) first instead of (${ballOn}). `;
+                let valOn = (ballOn === 'Colour' || ballOn === 'Red') ? 1 : snookerGame.getBallValue(ballOn);
+                penaltyPoints = Math.max(4, valOn, firstHit.value);
+            }
+        }
+
+
+        // --- Check Potted Balls & Add Score --- //
+        let nextBallOn = ballOn;
+        let legalPotCount = 0;
+
+        // Only evaluate potted balls if no foul occurred
+        if(!isFoul) {
+            if(pottedBalls.length === 0) {
+                // Legal but no Balls Potted. Change turn
+                message = "No ball potted.";
+                if(ballOn === 'Colour' ) nextBallOn = 'Red'; // After Colour, Ball On goes to Red
+            }
+            // Ball Potted
+            else {
+                for (let ball of pottedBalls) {
+                    let isValidPot = false;
+                    // Check if potted ball matches Ball On
+                    if(ballOn === 'Red') {
+                        if(ball.color.name === 'Red') isValidPot = true;
+                    }
+                    else if (ballOn === 'Colour') {
+                        if(ball.color.name !== 'Red') isValidPot = true;
+                    }
+                    else {
+                        // When there is no Reds remaining
+                        if(ball.color.name === ballOn) isValidPot = true;
+                    }
+
+                    // Check if potted balls are valid and calculate score
+                    if(isValidPot) {
+                        // Note: Multiple reds can be potted
+
+                        turnScore += ball.value;
+                        legalPotCount ++;
+                        if(ballOn !== 'Red' && legalPotCount > 1) {
+                            isFoul = true;
+                            message = "Foul: More than one Colour ball potted";
+                        }
+                    }
+                    else { // Invalid Pot - penalty
+                        isFoul = true;
+                        message = `Foul: Potted (${ball.color.name}) instead of (${ballOn}). `;
+                        penaltyPoints = Math.max(penaltyPoints, ball.value);
+                    }
+                }
+            }
+        } // End no foul check (!isFoul)
+
+
+        // --- Conclude Shot Result --- //
+        if(isFoul) {
+            snookerGame.applyFoul(penaltyPoints, message);
+
+            // After foul, next target is determined by remaining balls
+            if(this.hasRedsRemaining()) {
+                snookerGame.BallOn = 'Red';
+            } 
+            else {
+                const order = Game.COLOR_ORDER;
+                let correctedBallOn = null;
+
+                for(const colorName of order) {
+                    const ballExists = this.allBalls.some(ball => ball.color.name === colorName);
+                    if(ballExists) {
+                        correctedBallOn = colorName;
+                        break;
+                    }
+                }
+                if(correctedBallOn) {
+                    snookerGame.BallOn = correctedBallOn;
+                } else {
+                    snookerGame.BallOn = 'End Game';
+                    snookerGame.displayMessage("All balls potted! Good Job!");
+                }
+            }
+            // Re-spot potted balls after foul
+            snookerGame.ballsToRespot.push(...pottedBalls);
+
+        } 
+        else {
+            // Legal shot - add score
+
+            if(turnScore > 0) {
+                snookerGame.updateScore(turnScore);
+
+                // Update Message
+                const lastName = pottedBalls[pottedBalls.length - 1].color.name;
+                snookerGame.displayMessage(`${lastName} Ball: ${turnScore} points!`);
+
+                if(ballOn === 'Red') {
+                    // Red Potted, next Ball On is Colour
+                    if(this.hasRedsRemaining()) {
+                        snookerGame.BallOn = 'Colour';
+                    } else {
+                        snookerGame.BallOn = 'Yellow'; // No Reds left
+                    }
+
+                } else if (ballOn === 'Colour') {
+                    if(this.hasRedsRemaining()) {
+                        snookerGame.BallOn = 'Red'; // After Colour, Ball On goes to Red
+                        snookerGame.ballsToRespot.push(...pottedBalls); // Respot Colours
+                    } else {
+                        // No Reds remaining, continue with Colours in order
+                        snookerGame.ballsToRespot.push(...pottedBalls); // Respot Colours
+                        snookerGame.BallOn = Game.COLOR_ORDER;
+                    }
+                }
+                else {
+                    const order = Game.COLOR_ORDER;
+                    let idX = order.indexOf(ballOn);
+                    if(idX !== -1) {
+                        for(let ball of pottedBalls) {
+                            const index = this.allBalls.indexOf(ball);
+                            if(index > -1) {
+                                this.allBalls.splice(index, 1); // Remove potted colour from allBalls
+                            }
+                        }
+
+                        if (idX < order.length - 1) {
+                            snookerGame.BallOn = order[idX + 1]; // Next Colour in order
+                        } else {
+                            snookerGame.BallOn = 'End Game'; // End of frame
+                            snookerGame.displayMessage("All balls potted! Good Job!");
+                        }
+                    } 
+                }
+            } 
+            // No Balls Potted
+            else {
+                if(ballOn === 'Colour' && !this.hasRedsRemaining()) {
+                    nextBallOn = 'Red'; // After Colour, Ball On goes to Red
+                }
+                snookerGame.displayMessage("No ball potted.");
+            }
+        } // end isFoul
+    } // End checkShotResult
+
+
+
+    reSpotBall(pottedBall) {
+
+        if(pottedBall.color.name === 'Red' && !snookerGame.foulCommitted) return; // Reds are not re-spotted unless foul
+
+        const ballName = pottedBall.color.name.toUpperCase();
+        const originalSpot = this.reSpotPositions[ballName];
+        let targetSpot = originalSpot;
+
+
+        // If need to re-spot Red ball, choose random position
+        if(pottedBall.color.name === 'Red') {
+            targetSpot = this.getRandomFeltPosition();
+        }
+
+
+        if(!targetSpot) {
+            //console.error(`No spot defined for ${ballName} ball.`);
+            return;
+        }
+
+        let isSpotOccupied = false;
+        const collisionRadius = this.ballRadius * 2 + 0.1; // Small padding to avoid overlaps
+
+        // Check if the original spot is occupied
+        for(let otherBall of this.allBalls) {
+            // Check if other ball is too close to the target spot
+            if(otherBall.isPotted || otherBall === pottedBall) continue;
+
+            // Check distance between target spot and other ball
+            const distance = dist(targetSpot.x, targetSpot.y, otherBall.body.position.x, otherBall.body.position.y);
+            if(distance < collisionRadius) {
+                isSpotOccupied = true;
+                break;
+            }
+        }
+
+        // Re-spot the ball if spot is occupied
+        if(isSpotOccupied) {
+            // Find nearest available position around the original spot
+            targetSpot = this.reSpotPositions.BLACK; // Default to black spot if needed
+            //console.log(`${ballName} spot occupied. Re-spotting at Black ball spot.`);
+        
+        } else {
+            // Re-spot at original position
+        }
+
+        // Create and add the re-spotted ball to the world
+        const newBall = new Ball(
+                targetSpot.x, targetSpot.y, this.ballRadius, pottedBall.color, pottedBall.value);
+
+        // Add new ball to allBalls array, replacing the potted ball
+        const index = this.allBalls.indexOf(pottedBall);
+        if(index > - 1) {
+            this.allBalls.splice(index, 1, newBall);
+        }
+
+        newBall.isPotted = false; // Reset potted status
+    }
+
+
+
+    findClosestColission(startPos, directionAngle, ballRadius, ballToExclude) {
+        let closestCollision = {
+            dist: Infinity,
+            pos: null,
+            type: null, // 'ball', 'pocket', 'cushion'
+            targetBall: null,
+            pocket: null
+        };
+
+        const directionVector = p5.Vector.fromAngle(directionAngle);
+        const rayStart = createVector(startPos.x, startPos.y);
+
+        // Check collision with other balls
+        const ballsToCheck = this.allBalls.filter(ball => ball !== ballToExclude && !ball.isPotted);
+        for(let ball of ballsToCheck) {
+            const ballPos = createVector(ball.body.position.x, ball.body.position.y);
+            const toBall = p5.Vector.sub(ballPos, rayStart);
+            const radius = ballRadius + ballRadius;
+
+            const tca = toBall.dot(directionVector);
+            if(tca < 0) continue; // Ball is behind the ray
+
+            const d2 = toBall.dot(toBall) - tca * tca;
+            if(d2 > radius * radius) continue; // No collision
+
+            const thc = Math.sqrt(radius * radius - d2);
+            const t0 = tca - thc;
+            
+            if(t0 > 0.001 && t0 < closestCollision.dist) {
+                closestCollision = {
+                    dist: t0,
+                    pos: p5.Vector.add(rayStart, p5.Vector.mult(directionVector, t0)),
+                    type: 'ball',
+                    targetBall: ball,
+                    pocket: null
+                };
+            }
+        }
+
+
+        // Check collision with pockets
+        for(let pocket of snookerTable.pockets) {
+            const pocketPos = createVector(pocket.x, pocket.y);
+            const toPocket = p5.Vector.sub(pocketPos, rayStart);
+            const radius = snookerTable.pocketRadius + 12; // Effective radius for collision
+
+            const tca = toPocket.dot(directionVector);
+            const d2 = toPocket.dot(toPocket) - tca * tca;
+            const radiusEff = radius - ballRadius;
+
+            if(d2 > radiusEff * radiusEff) continue; // No collision
+
+            const thc = Math.sqrt(radiusEff * radiusEff - d2);
+            const t0 = tca - thc;
+
+            if(t0 > 0.001 && t0 < closestCollision.dist) {
+                closestCollision = {
+                    dist: t0,
+                    pos: p5.Vector.add(rayStart, p5.Vector.mult(directionVector, t0)),
+                    type: 'pocket',
+                    targetBall: null,
+                    pocket: pocket
+                };
+            }
+        }
+
+
+        // Check collision with table cushions
+        const minX = snookerTable.feltX + ballRadius;
+        const maxX = snookerTable.feltX + snookerTable.feltWidth - ballRadius;
+        const minY = snookerTable.feltY + ballRadius;
+        const maxY = snookerTable.feltY + snookerTable.feltHeight - ballRadius;
+
+        // Vertical cushions
+        if(abs(directionVector.x) > 0.001) {
+            const targetX = directionVector.x > 0 ? maxX : minX;
+            const t = (targetX - startPos.x) / directionVector.x;
+
+            if(t > 0.001 && t < closestCollision.dist) {
+                const yHit = startPos.y + directionVector.y * t;
+
+                if(yHit >= minY && yHit <= maxY) {
+                    closestCollision = {
+                        dist: t,
+                        pos: createVector(targetX, yHit),
+                        type: 'cushion',
+                        targetBall: null,
+                        pocket: null,
+                        normalAngle: directionVector.x > 0 ? PI : 0
+                    };
+                }
+            }
+        }
+
+        // Horizontal cushions
+        if(abs(directionVector.y) > 0.001) {
+            const targetY = directionVector.y > 0 ? maxY : minY;
+            const t = (targetY - startPos.y) / directionVector.y;
+
+            if(t > 0.001 && t < closestCollision.dist) {
+                const xHit = startPos.x + directionVector.x * t;
+                if(xHit >= minX && xHit <= maxX) {
+                    closestCollision = {
+                        dist: t,
+                        pos: createVector(xHit, targetY),
+                        type: 'cushion',
+                        targetBall: null,
+                        pocket: null,
+                        normalAngle: directionVector.y > 0 ? -HALF_PI : HALF_PI
+                    };
+                }
+            }
+        }
+
+        return closestCollision.dist === Infinity ? null : closestCollision;
+
+    } // ---- End of findClosestColission ---- //
+
+
+
+    drawPredictedPath(startBall, initialAngle) {
+        // ---- Cue Ball (solid line)Path Prediction ---- //
+        const {segments: cueSegments, lastCollision} = this._getPredictionSegments(
+            startBall.body.position,
+            initialAngle,
+            startBall,
+            'cue_path',
+            true, //stopOnBallCollision
+            [800, 400] // Line Lengths
+        );
+
+        let allSegments = cueSegments;
+
+        // ---- Object Ball (dashed line) Path Prediction ---- //
+        if(lastCollision && lastCollision.type === 'ball') {
+            const targetBall = lastCollision.targetBall;
+            const hitPos = lastCollision.pos;
+            const targetPos = targetBall.body.position;
+
+            // Calculate deflection angle for the target ball
+            const deflectionAngle = atan2(targetPos.y - hitPos.y, targetPos.x - hitPos.x);
+
+            // Get prediction segments for the target ball
+            const {segments: objSegments} = this._getPredictionSegments(
+                targetPos,
+                deflectionAngle,
+                targetBall,
+                'object_ball_path',
+                false, //stopOnBallCollision
+                [500, 300] // Line Lengths
+            );
+
+            // Combine segments ( cue ball path + object ball path )
+            // Annotate object-ball segments with the target ball's name
+            const annotated = objSegments.map(s => ({...s, objectBallName: targetBall.color.name}));
+            allSegments = allSegments.concat(annotated);
+        }
+        return allSegments;
+    }
+
+
+    // Helper function to get prediction segments
+    _getPredictionSegments(startPos, startAngle, ballToExclude, pathType, stopOnBallCollision, maxLengths) {
+        const Max_Seg = 2;  // Maximum number of segments to predict
+        const segments = []; // To store path segments
+        let lastCollision = null; // To store the last collision info
+
+        let currentPos = startPos; // Initial position
+        let currentAngle = startAngle; // Initial angle
+        
+        // Loop to find segments and collisions
+        for(let i = 0; i < Max_Seg; i++) {
+            // Define max length for current segment
+            const currentMaxLength = (maxLengths && maxLengths[i]) ? maxLengths[i] : Infinity;
+
+            const collision = this.findClosestColission(
+                currentPos,
+                currentAngle,
+                this.ballRadius,
+                ballToExclude
+            );
+
+            if(!collision) { // No collision found, extend line
+                const endPos = p5.Vector.add(
+                    createVector(currentPos.x, currentPos.y),
+                    p5.Vector.fromAngle(currentAngle).mult(currentMaxLength)
+                    // Line Length 
+                );
+
+                segments.push({start: currentPos, end: endPos, type: pathType, angle: currentAngle});
+                break; // No more collisions
+            }
+
+
+
+            // ---- Collision found ----- //
+
+            //-- Check if collision is beyond max length 
+            if(collision.dist > currentMaxLength) {
+                const endPos = p5.Vector.add(
+                    createVector(currentPos.x, currentPos.y),
+                    p5.Vector.fromAngle(currentAngle).mult(currentMaxLength)
+                );
+                segments.push({start: currentPos, end: endPos, type: pathType, angle: currentAngle});
+                break; // Segment ends before collision
+            }
+
+
+            // Calculate end position of the segment
+            let pathEndPos = collision.pos;
+
+            if(collision.type === 'cushion') {
+                const incomingVector = p5.Vector.fromAngle(currentAngle);
+                pathEndPos = createVector(collision.pos.x + incomingVector.x * 2,
+                            collision.pos.y + incomingVector.y * 2);
+            }
+
+            // Add segment to the list 
+            segments.push({start: currentPos, end: pathEndPos, type: pathType, angle: currentAngle});
+            lastCollision = collision; // Update last collision
+
+
+            // --- Handle collision response --- //
+
+            // Stop prediction on pocket collision
+            if(collision.type === 'pocket') {
+                break; 
+            }
+
+            // Ball collision: predict object ball path
+            if(collision.type === 'ball') {
+                if(stopOnBallCollision) {
+                    break; // Stop prediction on ball collision
+                } else {
+                    // Continue predicting for object ball
+                    currentPos = collision.pos;
+                    currentAngle = currentAngle; // Angle remains same for object ball
+                    continue;
+                }
+            }
+
+            // Bounce off cushion: calculate reflection angle
+            if(collision.type === 'cushion') { 
+                const normalAngle = collision.normalAngle;
+
+                // Return the absolute angle after reflection
+                if(Math.abs(cos(currentAngle - normalAngle)) > 0.001 &&
+                    (normalAngle === 0 || normalAngle === PI)) {
+                    // Vertical cushion
+                    currentAngle = PI - currentAngle;
+                }
+                else if(Math.abs(sin(currentAngle - normalAngle)) > 0.001 &&
+                    (normalAngle === HALF_PI || normalAngle === -HALF_PI)) {
+                    // Horizontal cushion
+                    currentAngle = -currentAngle;
+                }
+                else {
+                    break; // Angle too close to normal, stop prediction
+                }
+
+                // Update position slightly beyond cushion to avoid immediate re-collision
+                currentPos = collision.pos; // Update position to collision point
+                const directionVector = p5.Vector.fromAngle(currentAngle);
+                currentPos.x += directionVector.x * 2;
+                currentPos.y += directionVector.y * 2;
+
+                // Normalize angle between 0 and TWO_PI
+                currentAngle = (currentAngle % TWO_PI + TWO_PI) % TWO_PI; // Normalize angle
+            }
+
+        }  // End of for loop
+
+        return {segments, lastCollision};
+
+    } // End of _getPredictionSegments
+}
+
+
+/* 
+--- PoolCue JS ---
+============================================
+*/
+
+class PoolCue {
+
+    constructor() {
+        // Cue properties
+        this.length = 300; // Length of the cue/
+
+        //Cue base properties
+        this.baseLength = 80; // Base length of the cue
+        this.baseThickness = 8; // Thickness of the base
+
+        // Cue tip properties
+        this.tipLength = 5; // Length of the tip
+        this.tipThickness = 2.7; // Thickness of the tip
+        this.lineTip = 5; // Length of the line near the tip
+
+        //Cue body properties
+        this.bodyLength = this.length - this.baseLength - this.tipLength - this.lineTip; // Length of the body
+        this.bodyStartThickness = 8; // Thickness at the start of the body
+        this.bodyEndThickness = 5; // Thickness at the end of the body
+
+        // Shot power properties
+        this.shotDistance = 0; // Distance for shot power calculation
+
+        // Cue lock properties
+        this.isLocked = false; // Is the cue locked to a position
+        this.lockPositionX = 0; // X position when locked
+        this.lockPositionY = 0; // Y position when locked
+        this.lockAngle = 0; // Angle when locked
+    }
+
+
+    display(cueBallX, cueBallY, mouseX, mouseY) {
+        let angle;
+        let cueX = cueBallX
+        let cueY = cueBallY;        
+
+        if(snookerGame.isShotTaken) {
+            return; // Do not display the cue if the shot has been taken
+        }
+
+
+        // Determine cue position
+        if(this.isLocked) {
+            // Use locked position
+            angle = this.lockAngle;
+
+            // Calculate cue position based on locked angle and shot distance
+            cueX = cueBallX - cos(angle) * (this.shotDistance +8);
+            cueY = cueBallY - sin(angle) * (this.shotDistance +8);
+            
+            this.lockAngle = angle;// Update lock angle in case of shot distance change
+
+        } else {
+            // Unlocked position -> follows mouse
+            angle = atan2(mouseY - cueBallY, mouseX - cueBallX);
+
+            // Calculate cue position based on current mouse position and shot distance
+            cueX = cueBallX - cos(angle) * 8;
+            cueY = cueBallY - sin(angle) * 8;
+
+        }
+
+
+
+        // ---- Draw the Pool cue ---- //
+        push();
+        translate(cueX, cueY); // Move to cue position
+        rotate(angle); // Rotate towards target
+
+        // draw properties
+        const X_tipEnd = 0; // 0
+        const X_lineTip_Start = - this.tipLength; // -5
+        const X_bodyStart = - (this.tipLength + this.lineTip); // -10
+        const X_baseStart = - (this.tipLength + this.lineTip + this.bodyLength); // -220
+        const X_baseEnd = -this.length; // -300
+
+        noStroke();
+
+        // -- PoolCue Base (brown part )-- //
+        fill(102, 51, 0); // Brown color
+        rect(X_baseEnd, -this.baseThickness / 2, this.baseLength, this.baseThickness, 4, 0, 0, 4);
+        // -- End PoolCue Base -- //
+
+
+        // -- PoolCue Body (Silver part) -- //
+        fill(200);
+        quad(
+            X_bodyStart, - this.bodyEndThickness / 2,
+            X_bodyStart, this.bodyEndThickness / 2,
+            X_baseStart, this.bodyStartThickness / 2,
+            X_baseStart, - this.bodyStartThickness / 2
+        );
+        // -- End PoolCue Body -- //
+
+
+        // -- PoolCue Tip and line (end part) -- //
+
+        //line near tip
+        stroke(10);
+        strokeWeight(3);
+        line(X_bodyStart, -this.tipThickness / 2, X_bodyStart, this.tipThickness / 2);
+        noStroke();
+
+        fill(230);
+        //tip
+        arc(
+            X_lineTip_Start - 4, 0, this.tipLength * 2,
+            this.tipThickness * 2, -HALF_PI, HALF_PI
+        );
+
+        // -- End PoolCue Tip and line -- //
+
+        pop();
+    }
+}
+
+
+/* 
+--- ShotPower JS ---
+============================================
+*/
+
+class ShotPower {
+
+    constructor() {
+        // Position and dimensions
+        this.xPos = 136; // Left side of the canvas
+        this.yPos = 200; 
+        this.width = 40;
+        this.height = 300;
+        this.radius = 8; // Corner radius
+    
+        // Dragging state
+        this.isDragging = false;
+        this.shotPower = 0;
+        this.dragStartY = 0;
+        this.maxDragDistance = 200;
+    }
+
+
+
+    display() {
+
+        push();
+        rectMode(CORNER);
+        noStroke();
+
+        // ---- Shadow ----
+        drawingContext.shadowBlur = 12;
+        drawingContext.shadowColor = 'rgba(223, 228, 233, 0.4)';
+        drawingContext.shadowOffsetX = 0;
+        drawingContext.shadowOffsetY = 0;
+
+        // ---- Power Bar Background ----
+        fill(230);
+        rect(this.xPos, this.yPos, this.width, this.height, this.radius);
+        
+        // ---- Remove shadow for other elements ----
+        drawingContext.shadowBlur = 0;
+        drawingContext.shadowColor = 'rgba(0)';
+
+
+        // ---- GAP area ----
+        rect(this.xPos, this.yPos + this.height - this.gapHeight, 
+                this.width, this.gapHeight, 0, 0, this.radius, this.radius);
+
+        // ---- Power Fill ----
+        this.drawPowerBar();
+
+        // ---- Indicator ----
+        this.drawIndicator();
+
+        // ---- Cue Illustration ----
+        this.drawCueIllustration();
+
+
+        // --- Percentage Text ---
+        if(this.isDragging && this.shotPower > 0.04) {
+            // Calculate fill height based on shotPower
+            let labelY = this.yPos - this.shotPower - 10;
+
+            // Prevent text from going above the bar
+            let powerPercent = this.shotPower * 100;
+            let labelText = round(powerPercent) + '%';
+
+            // Draw text
+            fill(230);
+            textSize(16);
+            textAlign(CENTER, BOTTOM);
+            text(labelText, this.xPos + this.width / 2, labelY);
+        }
+        // ---- END Percentage Text ----
+
+        pop();
+
+    }
+
+
+
+    drawPowerBar() {
+
+        // Calculate fill height based on shotPower
+        const maxFillHeight = this.height;
+        let fillHeight = this.shotPower * maxFillHeight ;
+
+
+        // ---- Determine color based on shotPower ----
+        let powerColor;
+        if(this.shotPower <= 0.25) { 
+            powerColor = color(152, 217, 129); // Light Green
+        }
+        else if(this.shotPower <= 0.5) {
+            powerColor = color(31, 156, 31); // Green
+        }
+        else if(this.shotPower <= 0.75) {
+            powerColor = color(255, 153, 51); // Orange
+        }
+        else { // Above 75%
+            powerColor = color(255, 51, 51); // Red
+        }
+
+
+        // ---- Draw the filled portion ----
+        fill(powerColor); // Set fill color
+        if(this.shotPower >= 1.0) {
+            // Full power - fill entire bar
+            rect(this.xPos, this.yPos, this.width, this.height, this.radius);
+        } else if(this.shotPower > 0) {
+            // Partial power - fill from bottom up
+            rect(this.xPos, this.yPos, this.width, fillHeight, this.radius, this.radius, 0, 0);
+        }
+
+    } // --- END drawPowerBar ---
+
+
+
+    drawIndicator() {
+
+        // Length of dotted line
+        const indicatorPositions = [
+            {label: '25%', yFraction: 0.25},
+            {label: '50%', yFraction: 0.50},
+            {label: '75%', yFraction: 0.75},
+            {label: '100%', yFraction: 1.0},
+        ];
+
+        // --- Draw dotted lines and labels ---
+        const dashLength = 4;
+        const spaceLength = 3;
+
+        for(let indicator of indicatorPositions) {
+            let indicator_y = this.yPos + indicator.yFraction * this.height;
+            let currentx = this.xPos;
+
+            while (currentx < this.xPos + this.width && indicator.label !== '100%') {
+            // -- Dotted line
+            stroke(80);
+            strokeWeight(1.5);
+            line(currentx, indicator_y, 
+                min(currentx + dashLength, this.xPos + this.width),
+                indicator_y);
+            currentx += dashLength + spaceLength;
+            }
+        }
+
+    } // --- END drawIndicator ---
+
+
+
+    drawCueIllustration() {
+
+        // ---- Cue properties ----
+        const cue_height = 200;
+        const cue_width = 7;
+        const base_height = cue_height * 0.4;
+        const tip_height = cue_height * 0.02 ;
+        const body_height = cue_height - base_height - tip_height;
+
+        const center_y = this.yPos + this.height / 2 - 16;
+        const cue_x = this.xPos + this.width / 2;
+
+        // ---- Draw cue ----
+        push();
+        translate(cue_x, center_y);
+
+        noStroke();
+        rectMode(CENTER);
+
+        // ---- Shadow ----
+        drawingContext.shadowBlur = 8;
+        drawingContext.shadowColor = 'rgba(19, 20, 20, 0.4)';
+        drawingContext.shadowOffsetX = -2;
+        drawingContext.shadowOffsetY = 4;
+
+        // ---- Cue Body ----
+        fill(200); // silver gray color
+        rect(0, 0, cue_width, body_height + base_height);
+
+        // ---- Cue Base ----
+        fill(160, 82, 45); // wood darker color
+        rect(0, body_height/2 + base_height/2, cue_width, base_height, 0, 0, 4, 4);
+
+        // ---- Remove shadow ----
+        drawingContext.shadowBlur = 0;
+        drawingContext.shadowColor = 'rgba(0)';
+        drawingContext.shadowOffsetX = 0;
+        drawingContext.shadowOffsetY = 0;
+
+        // ---- Cue Tip ----
+        fill(240); // reddish brown color
+        rect(0, -cue_height/2 + tip_height/2, cue_width, tip_height, 3, 3, 0, 0);
+
+        pop();
+
+
+    } // --- END drawCueIllustration ---
+
+
+    isMouseOver() {
+        return mouseX > this.xPos &&
+                mouseX < this.xPos + this.width &&
+                mouseY > this.yPos &&
+                mouseY < this.yPos + this.height;
+    }
+
+    startDragging(currentMouseY) {
+        this.isDragging = true;
+        this.dragStartY = currentMouseY;
+    }
+
+    updateDrag(currentMouseY) {
+
+        if(this.isDragging) {
+
+            let dragDistance = currentMouseY - this.dragStartY;
+            let powerFraction = constrain(dragDistance / this.maxDragDistance, 0, 1);
+
+            this.shotPower = powerFraction;
+
+            if(poolCue) {
+                poolCue.shotDistance = this.shotPower * 50;
+            }
+        }
+
+    }
+
+
+    endDrag() {
+        if(!this.isDragging) return;// Prevent multiple calls
+        this.isDragging = false; // Stop dragging
+
+        if(!snookerBalls.cueBall || !poolCue || !poolCue.isLocked) {
+            this.shotPower = 0; // Reset shot power if no cue ball or cue not locked
+            return;
+        }
+
+        //Sound effect
+        strike_sound.play();
+
+        //--- Cue impact animation near contact point ---
+        if(snookerBalls && snookerBalls.cueBall && poolCue && poolCue.isLocked) {
+            const cuePos = snookerBalls.cueBall.body.position;
+            const impactX = cuePos.x - Math.cos(poolCue.lockAngle) * snookerBalls.ballRadius;
+            const impactY = cuePos.y - Math.sin(poolCue.lockAngle) * snookerBalls.ballRadius;
+            snookerBalls.addCueImpact(impactX, impactY);
+        }
+        
+
+        // ---- SHOT PHYSICS ----
+        const MaxSpeed = 18; // Maximum force applied to the cue ball
+        const speed = this.shotPower * MaxSpeed; // Scale shot power to speed
+        const angle = poolCue.lockAngle; // Use the locked angle of the cue
+        const velocityX = Math.cos(angle) * speed; 
+        const velocityY = Math.sin(angle) * speed;    
+
+        Matter.Body.setVelocity(snookerBalls.cueBall.body, {x: velocityX, y: velocityY});
+
+        poolCue.shotDistance = 0; // Reset shot distance after the shot
+        poolCue.isLocked = false; // Unlock the cue after the shot
+
+        snookerGame.isShotTaken = true; // Mark that a shot has been taken
+
+        //console.log(`Shot taken with power: ${this.shotPower.toFixed(2)} (Speed: ${speed.toFixed(2)}) at angle: ${degrees(angle).toFixed(2)}°`);
+
+        this.shotPower = 0; // Reset shot power after the shot
+        //--- END SHOT PHYSICS ----
+    }
+}
+
+
+/* 
+--- sketch JS ---
+============================================
+
+// matter.js module aliases
+var Engine = Matter.Engine,
+    Render = Matter.Render,
+    World = Matter.World,
+    Bodies = Matter.Bodies,
+    Runner = Matter.Runner;
+
+//Global variables
+let snookerGame;
+let snookerTable;
+let poolCue;
+let shotPower;
+let snookerBalls;
+
+// sounds effects
+let ball_collision_sound;
+let on_pocket_sound;
+let strike_sound;
+
+
+function preload() {
+    // Load sound effects
+    ball_collision_sound = loadSound('assets/ball_collision_sound.mp3');
+    on_pocket_sound = loadSound('assets/on_pocket_sound.mp3');
+    strike_sound = loadSound('assets/strike_sound.mp3');
+
+    ball_collision_sound.setVolume(0.4);
+    on_pocket_sound.setVolume(0.4);
+    strike_sound.setVolume(0.3);
+}
+
+
+
+function setup() {
+    createCanvas(Game.CANVAS_WIDTH, Game.CANVAS_HEIGHT);
+
+    // Create the Matter.js engine
+    engine = Engine.create();
+    world = engine.world;
+    world.gravity.y = 0; // No gravity in the snooker table
+
+
+    // Create instances
+    snookerGame = new Game(); // Game instance
+    snookerTable = new Table(); // Table instance
+    poolCue = new PoolCue(); // PoolCue instance
+    shotPower = new ShotPower(); // ShotPower instance
+    snookerBalls = new Balls(snookerTable);
+
+
+    // Run the engine
+    Runner.run(engine);
+
+
+    // Event listener for after each engine update
+    Matter.Events.on(engine, 'afterUpdate', function() {
+        if(!snookerGame.isCueBallPlacementMode) {
+            // Apply friction and settle balls smoothly, then check pockets
+            snookerBalls.applyRollingFriction();
+            snookerBalls.checkBallsInPockets();
+        }
+    });
+
+
+    // Detect first collision for rule checking
+    Matter.Events.on(engine, 'collisionStart', function(event) {
+        if(snookerGame.isShotTaken && !snookerBalls.firstBallHit) {
+            snookerBalls.handleCollision(event);
+            ball_collision_sound.play();
+        }
+    });
+
+}
+
+
+function draw() {
+    background(39, 55, 77); // Dark blue background
+
+    // Display header
+    snookerGame.displayHeader();
+
+    // Display game mode info
+    snookerGame.displayGameMode();
+
+
+    // Display table and balls
+    snookerTable.display();
+    snookerBalls.display();
+
+
+    // ---- Cue Ball Placement Logic ---- //
+    if(snookerGame.isCueBallPlacementMode && !snookerBalls.isCueBallPlaced) {
+        const r = snookerBalls.ballRadius;
+        const mouseOverFelt = 
+            mouseX > snookerTable.feltX && mouseX < snookerTable.feltX + snookerTable.feltWidth &&
+            mouseY > snookerTable.feltY && mouseY < snookerTable.feltY + snookerTable.feltHeight;
+
+        if(mouseOverFelt) {
+            // Draw cue ball at mouse position
+            snookerBalls.displayCueBallHand();
+            cursor(HAND)
+        } else {
+            cursor(ARROW); // Show cursor
+        }
+    return; // Skip the rest of draw loop
+    } // ---- End cue ball placement logic
+
+
+
+    // ---- Display pool cue and shot power ---- //
+    if(!snookerGame.isCueBallPlacementMode && snookerBalls.cueBall) {
+        const cueBallPos = snookerBalls.cueBall.body.position;
+        poolCue.display(cueBallPos.x, cueBallPos.y, mouseX, mouseY);
+    }
+
+
+    shotPower.display(); // Display shot power
+
+
+    // ---- Check if all balls have stopped moving ---- //
+    if(snookerGame.isShotTaken && !snookerBalls.areBallsMoving()) {
+
+        snookerBalls.checkShotResult();
+
+        if(snookerGame.ballsToRespot.length > 0) {
+            for(let ball of snookerGame.ballsToRespot) {
+                snookerBalls.reSpotBall(ball);
+            }
+            snookerGame.ballsToRespot = []; // Clear respot list
+        }
+
+        snookerGame.isShotTaken = false; // Reset shot taken flag
+
+        snookerBalls.firstBallHit = null; // Reset first ball hit
+        snookerBalls.pottedObjBallsOnShot = []; // Clear potted balls list
+        snookerBalls.cueBallPottedOnShot = false; // Reset cue ball potted flag
+
+        //console.log("All balls have stopped moving. Ready for next shot.");
+    }
+
+
+    // ---- Draw Prediction Line ---- //
+    if(poolCue && poolCue.isLocked && snookerBalls.cueBall && !snookerGame.isShotTaken) {
+        snookerBalls.drawPredictedPath(snookerBalls.cueBall, poolCue.lockAngle);
+    }
+
+} // End draw function
+
+
+function keyPressed() {
+
+    if(!snookerGame) return;
+
+    // ---- Mode Game Selection ---- //
+    // Select game mode
+    if (key === '1') {
+        snookerGame.setGameMode(1); // UI mode
+        snookerBalls.initializeBalls(1); // Initialize balls for mode 1
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    } 
+    else if (key === '2') {
+        snookerGame.setGameMode(2); // UI mode
+        snookerBalls.initializeBalls(2); // Initialize balls for mode 2
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    } 
+    else if (key === '3') {
+        snookerGame.setGameMode(3); // UI mode
+        snookerBalls.initializeBalls(3); // Initialize balls for mode 3
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    }
+    else if (key === '4') {
+        snookerGame.setGameMode(4); // UI mode
+        snookerBalls.initializeBalls(4); // Initialize balls for mode 4
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    }
+    else if (key === '5') {
+        snookerGame.setGameMode(5); // UI mode
+        snookerBalls.initializeBalls(5); // Initialize balls for mode 5
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    }
+    // ---- END Mode Game Selection ---- //
+
+}
+
+
+
+function mousePressed() {
+
+    // ---- Cue Ball Placement ---- //
+    if (!snookerBalls.isCueBallPlaced) {
+        
+        // Check if mouse is inside D-Zone
+        if (snookerTable.isInsideDZone(mouseX, mouseY)) {
+            // Place the cue ball at mouse position
+            snookerBalls.placeCueBall(mouseX, mouseY); 
+            snookerBalls.isCueBallPlaced = true;
+            snookerGame.isCueBallPlacementMode = false; // Disable cue ball placement mode
+            console.log("Cue ball placed successfully.");
+        } else {
+            console.log("Invalid position: Place the ball inside the D-Zone.");
+        }
+        
+        // Exit function after handling cue ball placement
+        return; 
+    }
+    // ---- End Cue Ball Placement ---- //
+
+
+    // ---- Shot Power Interaction ---- //
+    if(shotPower.isMouseOver()) {
+        shotPower.startDragging(mouseY);
+        //console.log("Started dragging shot power.");
+    }
+    // ---- END Shot Power Interaction ---- //
+
+
+    // ---- Pool Cue Interaction (lock/unlock) ---- //
+    if(!poolCue || !snookerBalls.cueBall) return;
+
+    if(!poolCue.isLocked) {
+        const cueBallPos = snookerBalls.cueBall.body.position;
+
+        poolCue.isLocked = true;
+        poolCue.lockPositionX = cueBallPos.x;
+        poolCue.lockPositionY = cueBallPos.y;
+
+        poolCue.lockAngle = atan2(mouseY - cueBallPos.y, mouseX - cueBallPos.x);
+
+        //console.log(`Cue locked at position: (${mouseX}, ${mouseY}) with angle: ${poolCue.lockAngle}`);
+    }
+    // ---- END Pool Cue Interaction ---- //
+
+} // End mousePressed function
+
+
+
+function doubleClicked() {
+    if(poolCue && poolCue.isLocked) {
+        poolCue.isLocked = false;
+        //console.log("Cue unlocked.");
+    }
+}
+
+
+
+function mouseDragged() {
+
+    // ---- Ignore dragging if shot is taken ---- //
+    if(snookerGame.isShotTaken) {
+        return; // Ignore dragging if shot is taken
+    }
+
+
+    // ---- Shot Power Dragging ---- //
+    if(shotPower.isDragging) {
+        shotPower.updateDrag(mouseY);
+    }
+    // ---- END Shot Power Dragging ---- //
+
+}
+
+
+function mouseReleased() {
+
+    // ---- Shot Power Release ---- //
+    if(shotPower.isDragging) {
+        shotPower.endDrag();
+        //console.log("Shot power set to.");
+    }
+    // ---- END Shot Power Release ---- //
+
+}
+
+

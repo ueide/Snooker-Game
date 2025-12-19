@@ -15,11 +15,12 @@ class Ball {
         // ---- Matter.js physics body ----
         this.body = Matter.Bodies.circle(x, y, radius, {
             label: isCueBall ? 'cueBall' : color.name, // Identifier for the ball
-            restitution: 0.85, // Bounciness
-            friction: 0.02, // Surface friction
-            frictionAir: 0.01, // Air resistance
-            density: 0.001, // Mass density
-            angularDamping: 0.01, // Angular damping
+            // Physics tuned for smoother snooker-like behaviour
+            restitution: 0.97,        // Collision bounciness
+            friction: 0.005,          // friction during movement (table friction)
+            frictionStatic: 0.005,    // static friction when stationary
+            frictionAir: 0.0025,      // air resistance (rolling resistance)
+            density: 0.01,            // Mass density
 
             collisionFilter: {
                 group: 0 // Default collision group

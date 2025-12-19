@@ -361,21 +361,20 @@ class Table {
 
 
     // Check if a point (x, y) with a given ballRadius is inside the D zone
-    isInsideDZone(x, y, ballRadius) { //
+    isInsideDZone(x, y) { 
         const D_centerY = this.feltC_y;
         const D_Radius = this.D_Radius;
         const baulkLineX = this.baulkLineX;
 
-        // Calculate distance from point (x, y) to the center of the D
+        // Calculate distance from point to center of D arc
         const distanceToDCenter = dist(x, y, baulkLineX, D_centerY);
 
-        if(distanceToDCenter > D_Radius - ballRadius) {
-            return false; // Outside D zone
-        } else if (x + ballRadius > baulkLineX) {
-            return false; // Outside D zone
-        }
+        // Check if the point is behind the baulk line and within the D arc
+        const isBehindBaulkLine = x <= baulkLineX;
+        const isWithinArc = distanceToDCenter <= D_Radius;
 
-        return true; // Inside D zone
+        // Return true if both conditions are met
+        return isBehindBaulkLine && isWithinArc
     }
 
 

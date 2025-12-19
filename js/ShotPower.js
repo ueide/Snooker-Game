@@ -189,8 +189,6 @@ class ShotPower {
         fill(240); // reddish brown color
         rect(0, -cue_height/2 + tip_height/2, cue_width, tip_height, 3, 3, 0, 0);
 
-
-
         pop();
 
 
@@ -227,8 +225,6 @@ class ShotPower {
 
 
     endDrag() {
-
-        
         if(!this.isDragging) return;// Prevent multiple calls
         this.isDragging = false; // Stop dragging
 
@@ -239,6 +235,15 @@ class ShotPower {
 
         //Sound effect
         strike_sound.play();
+        
+
+        //--- Cue impact animation near contact point ---
+        if(snookerBalls && snookerBalls.cueBall && poolCue && poolCue.isLocked) {
+            const cuePos = snookerBalls.cueBall.body.position;
+            const impactX = cuePos.x - Math.cos(poolCue.lockAngle) * snookerBalls.ballRadius;
+            const impactY = cuePos.y - Math.sin(poolCue.lockAngle) * snookerBalls.ballRadius;
+            snookerBalls.addCueImpact(impactX, impactY);
+        }
         
 
         // ---- SHOT PHYSICS ----

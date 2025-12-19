@@ -1,9 +1,33 @@
 //Candidate Number: RJ0630
 
-// I developed this entire project from scratch.
-// All the ideas, design, user interface, playable functions
-// were created and produced by me.
-// I used the Matter.js, P5.js documentation to learn how to use the libraries.
+// Snooker Game - Advanced Trajectory Prediction System
+// The application features a mouse-centric interface that emphasises user experience, offering the precision and speed expected for arcade games.
+// I developed a two-stage interaction system for the cue: aiming and striking. Users initially rotate the cue around the white ball with the mouse, then click to 'lock' the angle.
+// This approach simulates real snooker, where players set their aim before applying power. After locking the aim, users adjust the ShotPower slider to set the strike power.
+// This separation helps prevent accidental aim changes during power adjustments, a common problem with keyboard controls.
+
+// A solid line shows the cue ball's path, while a light dashed line indicates the hit ball's path. The difference in line weight and style makes it easy to intuitively distinguish between them.
+// The project follows strict Object-Oriented Programming (OOP) principles to promote modularity. The central Game class manages the game state, including scoring, rule enforcement like "Ball On" logic, and turn changes.
+// Physical behaviour is handled by Matter.js within the Ball class in Ball_phy.js. This class constructor standardises physical attributes such as restitution (bounciness) and frictionAir (air resistance),
+// ensuring all ball instances exhibit consistent and realistic physics.
+
+// I implemented five different game modes, including a "Cluster" mode (Mode 2) that employs a custom algorithm to spawn groups of red balls without overlapping, verifying distances against existing objects before creating new ones.
+// Visual feedback is managed through the animations array in Balls.js. For instance, the Cue Impact animation activates when the cue is struck;
+// it calculates the precise contact point on the ball's edge using Math.cos and Math.sin based on poolCue.lockAngle, displaying a localised flash that gradually fades through alpha interpolation.
+
+// A particular technical issue was the table's geometry. Standard rectangular colliders couldn’t handle the angular cushions properly.
+// In Table.js, I used Matter.Bodies.fromVertices to create custom polygons that match the visual quad() vertices precisely, ensuring balls bounce predictably off the angular cushion noses instead of an invisible bounding box.
+
+// Unique Extension: Raycasting Trajectory Prediction. I've developed an exciting Advanced Trajectory Prediction System that really elevates the standard! Unlike basic models that might only display a single line,
+//  my system employs a raycasting algorithm in Balls.js (using drawPredictedPath and findclosestcollision) to accurately simulate future physics.
+
+// It calculates the trajectory by projecting a vector from the cue ball and carefully considers potential collisions with cushions and other balls, making the prediction more reliable and insightful.
+// Cushion Reflection: If the ray strikes a cushion, the code determines the reflection angle using the cushion's normal vector (either vertical or horizontal) and then extends the prediction line.
+
+// Object Ball Deflection: Importantly, when the ray hits an object ball, the system determines the "ghost ball" position.
+// It then divides the prediction into two parts: a solid line showing the cue ball’s path after impact, and a dashed line representing the object ball’s new trajectory.
+// This involves calculating the deflection angle with atan2 based on the point of impact.
+
 
 
 // matter.js module aliases
@@ -34,7 +58,7 @@ function preload() {
 
     ball_collision_sound.setVolume(0.4);
     on_pocket_sound.setVolume(0.4);
-    strike_sound.setVolume(0.3);
+    strike_sound.setVolume(0.2);
 }
 
 
@@ -63,6 +87,8 @@ function setup() {
     // Event listener for after each engine update
     Matter.Events.on(engine, 'afterUpdate', function() {
         if(!snookerGame.isCueBallPlacementMode) {
+            // Apply friction and settle balls smoothly, then check pockets
+            snookerBalls.applyRollingFriction();
             snookerBalls.checkBallsInPockets();
         }
     });
@@ -174,46 +200,50 @@ function keyPressed() {
         snookerBalls.initializeBalls(3); // Initialize balls for mode 3
         snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
     }
+    else if (key === '4') {
+        snookerGame.setGameMode(4); // UI mode
+        snookerBalls.initializeBalls(4); // Initialize balls for mode 4
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    }
+    else if (key === '5') {
+        snookerGame.setGameMode(5); // UI mode
+        snookerBalls.initializeBalls(5); // Initialize balls for mode 5
+        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    }
     // ---- END Mode Game Selection ---- //
 
 }
 
 
+
 function mousePressed() {
 
     // ---- Cue Ball Placement ---- //
-    if(snookerGame.isCueBallPlacementMode && !snookerBalls.isCueBallPlaced) {
-        const r = snookerBalls.ballRadius;
-        const isValidPosition = snookerTable.isInsideDZone(mouseX, mouseY, r);
-
-        let isOverLapping = false; // Check for overlap with existing balls
-        // Check overlap with existing balls
-        for(let ball of snookerBalls.allBalls) {
-            const d = dist(mouseX, mouseY, ball.body.position.x, ball.body.position.y);
-            if(d < (r * 2)) {
-                isOverLapping = true;
-                break;
-            }
-        }
-
-        if(isValidPosition && !isOverLapping) {
-            snookerBalls.placeCueBall(mouseX, mouseY);
-            snookerGame.isCueBallPlacementMode = false; // Exit cue ball placement mode
-            poolCue.isLocked = false; // Reset cue lock state
-
-            //console.log(`Cue ball placed at: (${mouseX}, ${mouseY})`);
-            return;
+    if (!snookerBalls.isCueBallPlaced) {
+        
+        // Check if mouse is inside D-Zone
+        if (snookerTable.isInsideDZone(mouseX, mouseY)) {
+            // Place the cue ball at mouse position
+            snookerBalls.placeCueBall(mouseX, mouseY); 
+            snookerBalls.isCueBallPlaced = true;
+            snookerGame.isCueBallPlacementMode = false; // Disable cue ball placement mode
+            console.log("Cue ball placed successfully.");
         } else {
-            //console.log("Invalid cue ball position. Please place within the D-zone and avoid overlapping other balls.");
-            return;
+            console.log("Invalid position: Place the ball inside the D-Zone.");
         }
+        
+        // Exit function after handling cue ball placement
+        return; 
     }
+    // ---- End Cue Ball Placement ---- //
 
 
-    if(snookerGame.isShotTaken) {
-        //console.log("Shot already in progress. Please wait for balls to stop moving.");
-        return;
+    // ---- Shot Power Interaction ---- //
+    if(shotPower.isMouseOver()) {
+        shotPower.startDragging(mouseY);
+        //console.log("Started dragging shot power.");
     }
+    // ---- END Shot Power Interaction ---- //
 
 
     // ---- Pool Cue Interaction (lock/unlock) ---- //
@@ -232,16 +262,8 @@ function mousePressed() {
     }
     // ---- END Pool Cue Interaction ---- //
 
-
-
-    // ---- Shot Power Interaction ---- //
-    if(shotPower.isMouseOver()) {
-        shotPower.startDragging(mouseY);
-        //console.log("Started dragging shot power.");
-    }
-    // ---- END Shot Power Interaction ---- //
-
 } // End mousePressed function
+
 
 
 function doubleClicked() {
@@ -250,6 +272,7 @@ function doubleClicked() {
         //console.log("Cue unlocked.");
     }
 }
+
 
 
 function mouseDragged() {

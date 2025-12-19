@@ -175,7 +175,7 @@ class Game {
 
 
     setGameMode(newMode) {
-        if(newMode >= 1 && newMode <= 3) {
+        if(newMode >= 1 && newMode <= 5) {
             this.gameMode = newMode;
             //console.log(`Game mode set to: ${newMode}`);
             this.startGame(); // Restart game on mode change
@@ -189,17 +189,24 @@ class Game {
         // Constants for positioning
         const X_start = Game.CANVAS_WIDTH - 220; // X position for text
         const y_position = 188;
+        const space_between = 32;
+
         const Y_title = y_position; // Y position for title
         const Y_press = y_position + 24; // Y position for instructions
-        const Y_mode1 = y_position + 64; // Y position for mode 1
-        const Y_mode2 = y_position + 104; // Y position for mode 2
-        const Y_mode3 = y_position + 144; // Y position for mode 3
+
+        const Y_mode1 = y_position + space_between * 2; // Y position for mode 1
+        const Y_mode2 = y_position + space_between * 3 + 8; // Y position for mode 2
+        const Y_mode3 = y_position + space_between * 4 + 16; // Y position for mode 3
+        const Y_mode4 = y_position + space_between * 5 + 24; // Y position for mode 4
+        const Y_mode5 = y_position + space_between * 6 + 32; // Y position for mode 5
 
         // Map mode numbers to their Y positions
         const modeMap_Y = {
             1: Y_mode1,
             2: Y_mode2,
-            3: Y_mode3
+            3: Y_mode3,
+            4: Y_mode4,
+            5: Y_mode5
         };
 
 
@@ -232,8 +239,10 @@ class Game {
         textSize(16);
         const textOptions = [ 
             {text: "1: Standard", y: Y_mode1, mode: 1 },
-            {text: "2: Red Random", y: Y_mode2, mode: 2 },
-            {text: "3: Full Random", y: Y_mode3, mode: 3 }
+            {text: "2: Cluster", y: Y_mode2, mode: 2 },
+            {text: "3: Practice", y: Y_mode3, mode: 3 },
+            {text: "4: Red Random", y: Y_mode4, mode: 4 },
+            {text: "5: Full Random", y: Y_mode5, mode: 5 }
         ];
 
         for(let i = 0; i < textOptions.length; i++) {

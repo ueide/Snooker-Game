@@ -15,6 +15,24 @@ class Balls {
         this.pottedObjBallsOnShot = [];
         this.cueBallPottedOnShot = false;
         this.firstBallHit = null; // Track the first ball hit by the cue ball
+        
+        // Visual animations (cue impact, pocket entry)
+        this.animations = [];
+
+        this.clusterGap = 0.5;
+
+        // Rolling physics tuning (practice-proven defaults)
+        this.rollingFrictionCoeff = 0.0009;   // Per ms; higher = slows quicker
+        this.angularFrictionCoeff = 0.0015;   // Per ms; higher = faster spin decay
+        this.linearStopThreshold = 0.02;      // Below this speed, snap to rest
+        this.angularStopThreshold = 0.02;     // Below this spin, snap to rest
+
+        this.setClusterGap = (gap) => {
+            const g = Number(gap);
+            if (!isNaN(g)) {
+                this.clusterGap = Math.max(0, Math.min(8, g));
+            }
+        };
 
 
         // Define the properties for each type of ball
@@ -116,8 +134,8 @@ class Balls {
         // Clear existing balls
         this.reset();
 
-        //--- Mode 03: Full Random Game ---//
-        if (mode === 3) {
+        //--- Mode 05: Full Random Game ---//
+        if (mode === 5) {
             // Balls to replace: 1 Yellow, 1 Green, 1 Brown, 1 Blue, 1 Pink, 1 Black, 15 Reds
             let ballsToPlace = [
                 this.balls_prop.YELLOW, this.balls_prop.GREEN, this.balls_prop.BROWN,
@@ -150,11 +168,11 @@ class Balls {
                 } while (overlap); // Repeat until a non-overlapping position is found
                 this.allBalls.push(new Ball(pos.x, pos.y, this.ballRadius, prop, prop.value));
             }
-            return; // Exit after initializing mode 3
+            return; // Exit after initializing mode 5
         }
 
 
-        //--- MODE 01 and 02 --- //
+        //--- MODE 01, 02, 03, and 04 --- //
         // Place Coloured Balls on their spots
         this.allBalls.push(new Ball(this.balls_spot.YELLOW.x, this.balls_spot.YELLOW.y, this.ballRadius, this.balls_prop.YELLOW, 2));
         this.allBalls.push(new Ball(this.balls_spot.GREEN.x, this.balls_spot.GREEN.y, this.ballRadius, this.balls_prop.GREEN, 3));
@@ -164,13 +182,78 @@ class Balls {
         this.allBalls.push(new Ball(this.balls_spot.BLACK.x, this.balls_spot.BLACK.y, this.ballRadius, this.balls_prop.BLACK, 7));
 
         const redBalls = [];
-        if(mode === 1) { // mode 1: Single red ball pyramid
+        if(mode === 1) { // mode 1: Standard - Red ball pyramid
             const redPositions = this.getRedPyramidPositions(this.balls_spot.RED_APEX); // Pyramid apex at Pink spot
             for (let pos of redPositions) {
                 redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
             }
         } 
-        else if(mode === 2) { // mode 2: Full set of 15 red balls
+        else if(mode === 2) { // mode 2: Cluster (1 center + 4 around)
+            const clusters = 3; // 15 reds = 3 clusters of 5
+            const spacing = this.ballRadius * 2 + this.clusterGap; // Safety spacing between balls in cluster
+
+            // Safe margins so outer balls stay inside felt
+            const marginX = spacing + this.ballRadius + 1;
+            const marginY = spacing + this.ballRadius + 1;
+
+            const getRandomCenter = () => ({
+                x: random(this.table.feltX + marginX, this.table.feltX + this.table.feltWidth - marginX),
+                y: random(this.table.feltY + marginY, this.table.feltY + this.table.feltHeight - marginY)
+            });
+
+            for(let c = 0; c < clusters; c++) {
+                let placed = false;
+                for(let attempt = 0; attempt < 80 && !placed; attempt++) {
+                    const center = getRandomCenter();
+
+                    // Define 5-ball cross: center plus 4 cardinals
+                    const positions = [
+                        {x: center.x, y: center.y},
+                        {x: center.x + spacing, y: center.y},
+                        {x: center.x - spacing, y: center.y},
+                        {x: center.x, y: center.y + spacing},
+                        {x: center.x, y: center.y - spacing}
+                    ];
+
+                    // Validate boundaries and overlaps vs existing balls and already scheduled reds
+                    let invalid = false;
+                    for(const p of positions) {
+                        // Boundary check
+                        if(p.x < this.table.feltX + this.ballRadius ||
+                            p.x > this.table.feltX + this.table.feltWidth - this.ballRadius ||
+                            p.y < this.table.feltY + this.ballRadius ||
+                            p.y > this.table.feltY + this.table.feltHeight - this.ballRadius) { invalid = true; break; }
+
+                        // Overlap vs coloured and previously placed reds
+                        for(const existing of this.allBalls) {
+                            const d1 = dist(p.x, p.y, existing.body.position.x, existing.body.position.y);
+                            if(d1 < this.ballRadius * 2 + 0.1) { invalid = true; break; }
+                        }
+                        if(invalid) break;
+                        for(const r of redBalls) {
+                            const d2 = dist(p.x, p.y, r.body.position.x, r.body.position.y);
+                            if(d2 < this.ballRadius * 2 + 0.1) { invalid = true; break; }
+                        }
+                        if(invalid) break;
+                    }
+
+                    if(!invalid) {
+                        for(const p of positions) {
+                            redBalls.push(new Ball(p.x, p.y, this.ballRadius, this.balls_prop.RED, 1));
+                        }
+                        placed = true;
+                    }
+                }
+            }
+        }
+        else if(mode === 3) { // mode 3: Practice (15 reds pyramid)
+            // Same as standard mode BUT ONLY RED BALLS ARE THE PREDICTION LINES
+            const redPositions = this.getRedPyramidPositions(this.balls_spot.RED_APEX);
+            for (let pos of redPositions) {
+                redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
+            }
+        }
+        else if(mode === 4) { // mode 4: Red Random - 15 random red balls
             for(let i = 0; i < 15; i++) {
                 const pos = this.getRandomFeltPosition(); // Get random position on felt
                 redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
@@ -179,6 +262,90 @@ class Balls {
 
         this.allBalls.push(...redBalls); // Add red balls to allBalls array
     };
+
+
+    // ---- Animations API ---- //
+    addCueImpact(x, y) {
+        this.animations.push({
+            type: 'cueImpact', x, y, start: millis(), duration: 220
+        });
+    }
+
+    addPocketEntry(x, y, color) {
+        this.animations.push({
+            type: 'pocketEntry', x, y, start: millis(), duration: 400,
+            rgb: color && color.rgb ? color.rgb : [255, 255, 255]
+        });
+    }
+
+    drawAnimations() {
+        if(!this.animations.length) return;
+        const now = millis();
+        for(let i = this.animations.length - 1; i >= 0; i--) {
+            const a = this.animations[i];
+            const t = now - a.start;
+            if(t > a.duration) { this.animations.splice(i, 1); continue; }
+            const p = t / a.duration; // 0..1
+
+            if(a.type === 'cueImpact') {
+                const r = this.ballRadius * (0.4 + 1.2 * p);
+                const alpha = 220 * (1 - p);
+                push(); noFill();
+                stroke(240, 240, 240, alpha);
+                strokeWeight(2.2 - 1.6 * p);
+                circle(a.x, a.y, r * 2);
+                pop();
+            }
+            else if(a.type === 'pocketEntry') {
+                const [cr, cg, cb] = a.rgb;
+                const r = this.ballRadius * (0.6 + 2.0 * p);
+                const alpha = 200 * (1 - p);
+                push(); noFill();
+                stroke(cr, cg, cb, alpha);
+                strokeWeight(2);
+                circle(a.x, a.y, r * 2);
+                // Subtle star burst
+                stroke(cr, cg, cb, alpha * 0.8);
+                const rays = 6;
+                for(let k = 0; k < rays; k++) {
+                    const ang = k * TWO_PI / rays;
+                    const len = this.ballRadius * (0.6 + 1.4 * p);
+                    line(a.x, a.y, a.x + cos(ang) * len, a.y + sin(ang) * len);
+                }
+                pop();
+            }
+        }
+    }
+
+
+    // Apply rolling resistance and snap tiny velocities to zero for smooth stops
+    applyRollingFriction() {
+        const delta = (engine && engine.timing && engine.timing.delta) ? engine.timing.delta : 16.666;
+        const linDecay = Math.max(0, 1 - this.rollingFrictionCoeff * delta);
+        const angDecay = Math.max(0, 1 - this.angularFrictionCoeff * delta);
+
+        for (let ball of this.allBalls) {
+            if (ball.isPotted) continue;
+
+            const vx = ball.body.velocity.x;
+            const vy = ball.body.velocity.y;
+            const speed = Math.hypot(vx, vy);
+
+            if (speed > this.linearStopThreshold) {
+                const scale = linDecay;
+                Matter.Body.setVelocity(ball.body, { x: vx * scale, y: vy * scale });
+            } else {
+                Matter.Body.setVelocity(ball.body, { x: 0, y: 0 });
+            }
+
+            const av = ball.body.angularVelocity;
+            if (Math.abs(av) > this.angularStopThreshold) {
+                Matter.Body.setAngularVelocity(ball.body, av * angDecay);
+            } else {
+                Matter.Body.setAngularVelocity(ball.body, 0);
+            }
+        }
+    }
 
 
 
@@ -219,6 +386,12 @@ class Balls {
                 }
                 // Coloured balls path after hit (dashed line)
                 else if (segment.type.startsWith('object_ball_')) {
+                    // Practice mode (3): show dashed path only for RED object balls
+                    if (snookerGame.gameMode === 3) {
+                        if (!segment.objectBallName || segment.objectBallName !== 'Red') {
+                            continue;
+                        }
+                    }
                     const centerBall = segment.start;
                     const deflectionAngle = segment.angle;
                     const endPos = segment.end;
@@ -250,6 +423,9 @@ class Balls {
             }
             pop(); // End first push
         }
+
+        // ---- Overlay animations (cue impact, pocket entry) ---- //
+        this.drawAnimations();
     }
 
 
@@ -327,6 +503,9 @@ class Balls {
 
                 // Sounds effect
                 on_pocket_sound.play();
+
+                // Pocket entry animation (use pocket position)
+                this.addPocketEntry(pocked.x, pocked.y, ball.color);
 
                 // Remove ball from physics world
                 Matter.World.remove(engine.world, ball.body);
@@ -786,7 +965,9 @@ class Balls {
             );
 
             // Combine segments ( cue ball path + object ball path )
-            allSegments = allSegments.concat(objSegments);
+            // Annotate object-ball segments with the target ball's name
+            const annotated = objSegments.map(s => ({...s, objectBallName: targetBall.color.name}));
+            allSegments = allSegments.concat(annotated);
         }
         return allSegments;
     }
