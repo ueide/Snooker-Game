@@ -58,6 +58,9 @@ class Game {
     updateScore(ballValue) {
         this.playerScore += ballValue;
         this.currentBreak += ballValue;
+        if(this.currentBreak > this.highBreak) {
+            this.highBreak = this.currentBreak;
+        }
     }
 
 
