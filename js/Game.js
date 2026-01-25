@@ -66,6 +66,10 @@ class Game {
 
     applyFoul(penalty, message) { // Penalty and message
         this.playerScore -= penalty;
+        // Ensure score never goes below 0
+        if(this.playerScore < 0) {
+            this.playerScore = 0;
+        }
         this.foulCommitted = true;
         this.foulMessage = message;
         this.displayMessage(`${message} (- ${penalty})`);
