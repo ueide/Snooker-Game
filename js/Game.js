@@ -42,7 +42,7 @@ class Game {
         this.uiMessage ='Put the cue ball in play to start the game'
         this.uiMessageTimer = 0; // Timer for displaying UI messages
 
-        this.startGame();
+        // Don't call startGame() here - let menu handle it
     } // End of constructor
 
 
@@ -207,13 +207,12 @@ class Game {
         const Y_mode4 = y_position + space_between * 5 + 24; // Y position for mode 4
         const Y_mode5 = y_position + space_between * 6 + 32; // Y position for mode 5
 
-        // Map mode numbers to their Y positions
+        // Map actual game mode numbers to their display Y positions
         const modeMap_Y = {
-            1: Y_mode1,
-            2: Y_mode2,
-            3: Y_mode3,
-            4: Y_mode4,
-            5: Y_mode5
+            1: Y_mode1,   // Standard
+            2: Y_mode2,   // Cluster
+            4: Y_mode3,   // Red Random
+            5: Y_mode4    // Full Random
         };
 
 
@@ -222,9 +221,12 @@ class Game {
         const HighlightHeight = 32;
         const HighlightY = modeMap_Y[this.gameMode] - 9;
 
-        noStroke();
-        fill(217); // Highlight background
-        rect(X_start - 16, HighlightY, HighlightWidth, HighlightHeight, 20);
+        // Only show highlight if in a game mode (not menu)
+        if (HighlightY !== undefined) {
+            noStroke();
+            fill(217); // Highlight background
+            rect(X_start - 16, HighlightY, HighlightWidth, HighlightHeight, 20);
+        }
         // ---- End Highlight ---- //
 
 
@@ -247,9 +249,9 @@ class Game {
         const textOptions = [ 
             {text: "1: Standard", y: Y_mode1, mode: 1 },
             {text: "2: Cluster", y: Y_mode2, mode: 2 },
-            {text: "3: Practice", y: Y_mode3, mode: 3 },
-            {text: "4: Red Random", y: Y_mode4, mode: 4 },
-            {text: "5: Full Random", y: Y_mode5, mode: 5 }
+            {text: "3: Red Random", y: Y_mode3, mode: 4 },
+            {text: "4: Full Random", y: Y_mode4, mode: 5 },
+            {text: "5: Menu", y: Y_mode5, mode: 0 }
         ];
 
         for(let i = 0; i < textOptions.length; i++) {

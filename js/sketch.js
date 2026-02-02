@@ -43,11 +43,15 @@ let snookerTable;
 let poolCue;
 let shotPower;
 let snookerBalls;
+let menu;
 
 // sounds effects
 let ball_collision_sound;
 let on_pocket_sound;
 let strike_sound;
+
+// menu image
+let menuImage;
 
 
 function preload() {
@@ -59,6 +63,9 @@ function preload() {
     ball_collision_sound.setVolume(0.4);
     on_pocket_sound.setVolume(0.4);
     strike_sound.setVolume(0.2);
+
+    // Load menu image
+    menuImage = loadImage('assets/menu.png');
 }
 
 
@@ -78,6 +85,8 @@ function setup() {
     poolCue = new PoolCue(); // PoolCue instance
     shotPower = new ShotPower(); // ShotPower instance
     snookerBalls = new Balls(snookerTable);
+    menu = new Menu(); // Menu instance
+    menu.setMenuImage(menuImage); // Set the menu background image
 
 
     // Run the engine
@@ -107,6 +116,12 @@ function setup() {
 
 function draw() {
     background(39, 55, 77); // Dark blue background
+
+    // If menu is active, show menu and return
+    if (menu && menu.isActive) {
+        menu.display();
+        return;
+    }
 
     // Display header
     snookerGame.displayHeader();
@@ -196,19 +211,17 @@ function keyPressed() {
         snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
     } 
     else if (key === '3') {
-        snookerGame.setGameMode(3); // UI mode
-        snookerBalls.initializeBalls(3); // Initialize balls for mode 3
-        snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
-    }
-    else if (key === '4') {
         snookerGame.setGameMode(4); // UI mode
         snookerBalls.initializeBalls(4); // Initialize balls for mode 4
         snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
     }
-    else if (key === '5') {
+    else if (key === '4') {
         snookerGame.setGameMode(5); // UI mode
         snookerBalls.initializeBalls(5); // Initialize balls for mode 5
         snookerGame.isCueBallPlacementMode = true; // Enable cue ball placement
+    }
+    else if (key === '5') {
+        menu.returnToMenu(); // Return to menu
     }
     // ---- END Mode Game Selection ---- //
 
@@ -217,6 +230,12 @@ function keyPressed() {
 
 
 function mousePressed() {
+
+    // Handle menu clicks
+    if (menu && menu.isActive) {
+        menu.handleMousePressed();
+        return;
+    }
 
     // ---- Cue Ball Placement ---- //
     if (!snookerBalls.isCueBallPlaced) {
