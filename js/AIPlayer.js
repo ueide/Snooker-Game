@@ -7,18 +7,27 @@
 //--- AI Player Class ---///
 class AIPlayer {
     constructor() {
-        this.thinkingTime = 1500; // Delay before shot (ms) - makes it feel more natural
+        this.thinkingTime = 1500; // Delay to simulate thinking (ms)
         this.isThinking = false;
         this.selectedAngle = 0;
         this.selectedPower = 0;
         
         // Shot analysis parameters
-        this.angleTestSteps = 72; // Test 72 angles (every 5 degrees)
+        this.angleTestSteps = 36; // Test 36 angles (every 5 degrees, only in valid 180 degree range)
         this.minPower = 0.6;
         this.maxPower = 1.0;
+        
+        // Weights for scoring shots
+        this.weights = {
+            pocketProximity: 250,      // Bonus for balls near pockets
+            directPath: 200,           // Heavy bonus for direct shots (no cushions)
+            targetDistance: 80,        // Prefer closer target balls
+            tableCenter: 20,           // Slight preference for centered balls
+            pocketAlignment: 150       // Bonus for good angle to pocket
+        };
     }
 
-    // Called when it's the AI's turn to play
+    // Main function to take a turn
     takeTurn() {
         if (this.isThinking) {
             console.log("AI already thinking, skipping");
@@ -35,7 +44,7 @@ class AIPlayer {
         }, this.thinkingTime);
     }
 
-    // Analyze the table and choose the best shot
+    // Analyze the table and decide on a shot
     analyzeAndShoot() {
         if (!snookerBalls.cueBall) {
             console.log("AI: No cue ball found");
@@ -52,30 +61,30 @@ class AIPlayer {
         
         if (bestShot) {
             console.log("AI executing shot with score:", bestShot.score);
-            // Lock the cue at the chosen angle
+            // Lock cue position and angle
             poolCue.isLocked = true;
             poolCue.lockPositionX = cueBallPos.x;
             poolCue.lockPositionY = cueBallPos.y;
             poolCue.lockAngle = bestShot.angle;
             
-            // Set power
+            // Set the shot power
             shotPower.currentPower = bestShot.power;
             
-            // Execute shot after a brief moment
+            // Execute the shot after a short delay
             setTimeout(() => {
                 this.executeShot();
             }, 300);
         } else {
             console.log("AI: No good shot found, executing random shot");
-            // Fallback: random shot if no good option found
+            // No good shot found, play a random shot
             this.executeRandomShot(cueBallPos);
         }
     }
 
-    // Find the best shot by testing multiple angles and evaluating outcomes
+    // Find the best shot by testing angles and scoring options
     findBestShot(cueBallPos, targetBallName) {
         let bestShot = null;
-        let bestScore = -1;
+        let bestScore = -Infinity;
 
         // Get target balls
         const targetBalls = this.getTargetBalls(targetBallName);
@@ -84,10 +93,49 @@ class AIPlayer {
             return null;
         }
 
-        // Test multiple angles
-        for (let i = 0; i < this.angleTestSteps; i++) {
-            const angle = (TWO_PI * i) / this.angleTestSteps;
+        // Score target balls based on proximity to pockets and cue ball
+        const scoredTargets = targetBalls.map(ball => {
+            const ballPos = ball.body.position;
+            const distToCue = dist(cueBallPos.x, cueBallPos.y, ballPos.x, ballPos.y);
+            const closestPocket = this.getClosestPocket(ballPos);
+            const distToPocket = dist(ballPos.x, ballPos.y, closestPocket.x, closestPocket.y);
             
+            // Calculate option score for this ball
+            let optionScore = 0;
+            
+            // Bonus for balls close to pockets
+            if (distToPocket < 100) {
+                optionScore += 500;
+            } else if (distToPocket < 180) {
+                optionScore += 300;
+            } else if (distToPocket < 280) {
+                optionScore += 150;
+            }
+            
+            // Bonus for balls close to cue
+            if (distToCue < 150) {
+                optionScore += 200;
+            } else if (distToCue < 280) {
+                optionScore += 100;
+            }
+            
+            return { ball, optionScore, distToCue, distToPocket };
+        });
+
+        // Sort targets by their option score
+        scoredTargets.sort((a, b) => b.optionScore - a.optionScore);
+        
+        // Focus on top 4 best target balls for shot evaluation
+        const relevantTargets = scoredTargets.slice(0, Math.min(4, scoredTargets.length)).map(t => t.ball);
+        
+        console.log(`AI evaluating ${relevantTargets.length} target ball(s): ${relevantTargets.map(b => b.color.name).join(', ')}`);
+
+        // Test multiple angles around the cue ball
+        for (let i = 0; i < this.angleTestSteps; i++) {
+            // Angle from -PI to PI, then filter to valid range
+            const baseAngle = (TWO_PI * i) / this.angleTestSteps;
+            const angle = baseAngle; // Will naturally distribute across full range
+
             // Use the existing trajectory prediction to find what we'll hit
             const prediction = snookerBalls._getPredictionSegments(
                 cueBallPos,
@@ -98,27 +146,29 @@ class AIPlayer {
                 [800, 400]
             );
 
-            // Check if we hit a ball
+            // Check what ball we hit first
             if (prediction.lastCollision && prediction.lastCollision.type === 'ball') {
                 const hitBall = prediction.lastCollision.targetBall;
                 const hitBallName = hitBall.color.name;
                 
-                // Only evaluate if we hit the correct target
+                // Check if this is a valid target
                 if (this.isValidTarget(hitBallName, targetBallName)) {
                     const hitBallPos = hitBall.body.position;
-                    const score = this.evaluateShot(cueBallPos, hitBallPos, angle, prediction);
+                    // Pass whether this is a high-priority target
+                    const isHighPriority = relevantTargets.includes(hitBall);
+                    const score = this.evaluateShot(cueBallPos, hitBallPos, angle, prediction, isHighPriority);
                     
                     // If this is better than previous best, save it
                     if (score > bestScore) {
                         bestScore = score;
                         
-                        // Calculate power based on distance and shot difficulty
+                        // Determine power based on distance to target ball
                         const distanceToBall = dist(
                             cueBallPos.x, cueBallPos.y,
                             hitBallPos.x, hitBallPos.y
                         );
                         
-                        // Adjust power: closer shots = less power, farther = more power
+                        // Power scaling: closer balls need less power, distant balls need more
                         let power = 0.7 + (distanceToBall / 500) * 0.3;
                         power = constrain(power, this.minPower, this.maxPower);
                         
@@ -133,62 +183,115 @@ class AIPlayer {
             }
         }
 
-        console.log("Best shot found:", bestShot ? `angle=${bestShot.angle.toFixed(2)}, power=${bestShot.power.toFixed(2)}, score=${bestShot.score.toFixed(1)}` : "None");
+        console.log("Best shot found:", bestShot ? `angle=${bestShot.angle.toFixed(2)}, power=${bestShot.power.toFixed(2)}, score=${bestShot.score.toFixed(1)}, ball=${bestShot.targetBall.color.name}` : "None");
         return bestShot;
     }
 
     // Evaluate the quality of a shot based on various factors
-    evaluateShot(cueBallPos, targetBallPos, angle, prediction) {
+    evaluateShot(cueBallPos, targetBallPos, angle, prediction, isHighPriority) {
         let score = 100; // Base score for hitting correct target
         
-        // 1. POCKET PROXIMITY - Most important factor
-        const closestPocket = this.getClosestPocket(targetBallPos);
-        const distanceToPocket = dist(targetBallPos.x, targetBallPos.y, closestPocket.x, closestPocket.y);
-        
-        // Heavy bonus for balls very close to pockets
-        if (distanceToPocket < 80) {
-            score += 200; // Excellent pot opportunity
-        } else if (distanceToPocket < 150) {
-            score += 100; // Good pot opportunity
-        } else if (distanceToPocket < 250) {
-            score += 50; // Decent pot opportunity
+        // PRIORITY BONUS: If this is a high-priority target (near pocket and/or near cue)
+        // Give massive boost to make sure AI picks these first
+        if (isHighPriority) {
+            score += 300; // Major priority boost
         }
         
-        // 2. ANGLE TO POCKET - Check if ball can travel to pocket
-        const angleToPocket = atan2(closestPocket.y - targetBallPos.y, closestPocket.x - targetBallPos.x);
-        const hitAngle = atan2(targetBallPos.y - cueBallPos.y, targetBallPos.x - cueBallPos.x);
-        
-        // Calculate angle difference (how well aligned the shot is with pocket)
-        let angleDiff = abs(angleToPocket - hitAngle);
-        if (angleDiff > PI) angleDiff = TWO_PI - angleDiff;
-        
-        // Big bonus for well-aligned shots
-        const angleScore = (PI - angleDiff) / PI * 100;
-        score += angleScore;
-        
-        // 3. DISTANCE TO TARGET BALL - Prefer closer balls
-        const distanceToBall = dist(cueBallPos.x, cueBallPos.y, targetBallPos.x, targetBallPos.y);
-        const distanceScore = Math.max(0, 80 - distanceToBall / 8);
-        score += distanceScore;
-        
-        // 4. CLEAR PATH - Check if trajectory has cushion bounces
+        // MAJOR FACTOR 1: DIRECT PATH vs CUSHION USAGE
+        // Count cushion bounces - heavy penalty for bounces
         let cushionBounces = 0;
         for (let segment of prediction.segments) {
-            if (segment.bounces) {
-                cushionBounces += segment.bounces;
+            if (segment.type === 'cue_path') {
+                // Check if this segment includes a cushion bounce
+                const dx = segment.end.x - segment.start.x;
+                const dy = segment.end.y - segment.start.y;
+                const segmentDistance = Math.hypot(dx, dy);
+                
+                // If segment is short and there's a collision, it likely hit a cushion
+                if (segmentDistance < 300) {
+                    cushionBounces++;
+                }
             }
         }
         
-        // Penalty for shots requiring cushions
-        score -= cushionBounces * 30;
+        // CRITICAL: Heavily penalize cushion shots
+        // Direct path shots should be strongly preferred
+        if (cushionBounces === 0) {
+            score += this.weights.directPath; // Excellent: direct shot
+        } else {
+            score -= cushionBounces * 150; // Heavy penalty for each cushion bounce
+        }
         
-        // 5. TARGET BALL NEAR CENTER OF TABLE - Prefer balls in play area
+        // FACTOR 2: DISTANCE TO TARGET BALL
+        // Prefer closer balls - they're easier and more reliable
+        const distanceToBall = dist(
+            cueBallPos.x, cueBallPos.y,
+            targetBallPos.x, targetBallPos.y
+        );
+        
+        // STRONGER weighting for distance - closer balls are MUCH better
+        if (distanceToBall < 120) {
+            score += this.weights.targetDistance * 1.5; // Very close ball
+        } else if (distanceToBall < 200) {
+            score += this.weights.targetDistance; // Close ball, good shot
+        } else if (distanceToBall < 280) {
+            score += this.weights.targetDistance * 0.6; // Medium distance
+        } else if (distanceToBall < 400) {
+            score += this.weights.targetDistance * 0.3; // Far ball
+        } else {
+            score += Math.max(0, this.weights.targetDistance * 0.1 - (distanceToBall - 400) / 20);
+        }
+        
+        // FACTOR 3: POCKET PROXIMITY - Most important for potting
+        const closestPocket = this.getClosestPocket(targetBallPos);
+        const distanceToPocket = dist(
+            targetBallPos.x, targetBallPos.y,
+            closestPocket.x, closestPocket.y
+        );
+        
+        // MASSIVE bonuses for balls near pockets (gimme shots)
+        if (distanceToPocket < 80) {
+            score += this.weights.pocketProximity * 1.3; // EXCELLENT pot opportunity - gimme
+        } else if (distanceToPocket < 150) {
+            score += this.weights.pocketProximity; // VERY GOOD pot opportunity
+        } else if (distanceToPocket < 230) {
+            score += this.weights.pocketProximity * 0.6; // Good pot opportunity
+        } else if (distanceToPocket < 320) {
+            score += this.weights.pocketProximity * 0.3; // Decent pot opportunity
+        }
+        
+        // FACTOR 4: ANGLE TO POCKET ALIGNMENT
+        // How well does the shot direction align with pocket direction?
+        const angleToPocket = atan2(
+            closestPocket.y - targetBallPos.y,
+            closestPocket.x - targetBallPos.x
+        );
+        
+        const hitAngle = atan2(
+            targetBallPos.y - cueBallPos.y,
+            targetBallPos.x - cueBallPos.x
+        );
+        
+        let angleDiff = abs(angleToPocket - hitAngle);
+        if (angleDiff > PI) {
+            angleDiff = TWO_PI - angleDiff;
+        }
+        
+        // Better alignment = higher score
+        // Perfect alignment (0 degrees) = max score
+        const alignmentScore = this.weights.pocketAlignment * (1 - Math.min(1, angleDiff / PI));
+        score += alignmentScore;
+        
+        // FACTOR 5: TABLE POSITION
+        // Slight preference for balls in center area (more potting opportunities)
         const tableCenterX = snookerTable.feltX + snookerTable.feltWidth / 2;
         const tableCenterY = snookerTable.feltY + snookerTable.feltHeight / 2;
-        const distanceToTableCenter = dist(targetBallPos.x, targetBallPos.y, tableCenterX, tableCenterY);
+        const distanceToTableCenter = dist(
+            targetBallPos.x, targetBallPos.y,
+            tableCenterX, tableCenterY
+        );
         
-        // Slight bonus for balls near center
-        const centerScore = Math.max(0, 30 - distanceToTableCenter / 10);
+        const centerScore = Math.max(0, this.weights.tableCenter - distanceToTableCenter / 20);
         score += centerScore;
         
         return score;
@@ -260,18 +363,15 @@ class AIPlayer {
         const angle = poolCue.lockAngle;
         const power = shotPower.currentPower;
         
-        // Calculate impulse based on power
-        const maxImpulse = 0.12; // Tuned for snooker
-        const impulse = power * maxImpulse;
+        // Use same physics as player - setVelocity with MaxSpeed
+        const MaxSpeed = 18; // Same as ShotPower.js
+        const speed = power * MaxSpeed;
+        const velocityX = Math.cos(angle) * speed;
+        const velocityY = Math.sin(angle) * speed;
         
-        // Apply force to cue ball
-        const forceX = cos(angle) * impulse;
-        const forceY = sin(angle) * impulse;
-        
-        Matter.Body.applyForce(
+        Matter.Body.setVelocity(
             snookerBalls.cueBall.body,
-            { x: cueBallPos.x, y: cueBallPos.y },
-            { x: forceX, y: forceY }
+            { x: velocityX, y: velocityY }
         );
         
         // Play strike sound
@@ -307,9 +407,7 @@ class AIPlayer {
     }
 
     chooseCueBallPlacement() {
-        // Smart cue ball placement in D-zone
-        // Returns {x, y} coordinates for optimal cue ball position
-        
+        // Choose optimal cue ball placement in D-zone
         const targetBallName = snookerGame.BallOn;
         const targetBalls = this.getTargetBalls(targetBallName);
         
@@ -321,74 +419,63 @@ class AIPlayer {
             };
         }
         
-        // Test several positions in the D-zone
+        // Find closest target balls
+        const sortedTargets = targetBalls.sort((a, b) => {
+            const dBaulk = 80; // Distance from baulk line to check
+            const cA = snookerTable.baulkLineX - dBaulk;
+            const cB = snookerTable.baulkLineX - dBaulk;
+            
+            const distA = dist(cA, snookerTable.feltC_y, a.body.position.x, a.body.position.y);
+            const distB = dist(cB, snookerTable.feltC_y, b.body.position.x, b.body.position.y);
+            return distA - distB;
+        });
+        
+        // D-zone parameters
         const baulkX = snookerTable.baulkLineX;
         const centerY = snookerTable.feltY + snookerTable.feltHeight / 2;
         const dRadius = snookerTable.D_Radius;
         
-        // Test 5 positions: center, top, bottom, upper-mid, lower-mid
+        // Generate test positions
         const testPositions = [
             { x: baulkX, y: centerY }, // Center
-            { x: baulkX, y: centerY - dRadius * 0.7 }, // Upper
-            { x: baulkX, y: centerY + dRadius * 0.7 }, // Lower
-            { x: baulkX - dRadius * 0.3, y: centerY - dRadius * 0.4 }, // Upper-mid left
-            { x: baulkX - dRadius * 0.3, y: centerY + dRadius * 0.4 }  // Lower-mid left
+            { x: baulkX, y: centerY - dRadius * 0.5 }, // Top
+            { x: baulkX, y: centerY + dRadius * 0.5 }, // Bottom
+            { x: baulkX - dRadius * 0.5, y: centerY - dRadius * 0.3 }, // Upper left
+            { x: baulkX - dRadius * 0.5, y: centerY + dRadius * 0.3 }, // Lower left
+            { x: baulkX - dRadius * 0.7, y: centerY }, // Far left
+            { x: baulkX + dRadius * 0.2, y: centerY } // Slightly right
         ];
         
         let bestPosition = testPositions[0];
-        let bestScore = -1;
+        let bestScore = -Infinity;
         
         // Evaluate each position
         for (let pos of testPositions) {
-            // Make sure it's inside D-zone
+            // Must be inside D-zone
             if (!snookerTable.isInsideDZone(pos.x, pos.y)) continue;
             
             let score = 0;
             
-            // Count how many target balls we can hit from this position
-            let canHitTargets = 0;
-            
-            for (let targetBall of targetBalls) {
+            // Evaluate access to closest target balls
+            for (let j = 0; j < Math.min(2, sortedTargets.length); j++) {
+                const targetBall = sortedTargets[j];
                 const targetPos = targetBall.body.position;
                 
-                // Calculate direct angle to target
-                const angleToTarget = atan2(targetPos.y - pos.y, targetPos.x - pos.x);
-                
-                // Check if we can see this ball (no obstructions)
+                // Distance to this target
                 const distance = dist(pos.x, pos.y, targetPos.x, targetPos.y);
                 
-                // Prefer closer balls
-                const distanceScore = Math.max(0, 100 - distance / 5);
+                // Closer position = higher score
+                const distanceScore = Math.max(0, 200 - distance / 2);
+                score += distanceScore * (2 - j); // Closest target gets more weight
                 
-                // Check if ball is near a pocket
+                // Check if target is pottable from this position
                 const closestPocket = this.getClosestPocket(targetPos);
                 const distanceToPocket = dist(targetPos.x, targetPos.y, closestPocket.x, closestPocket.y);
                 
-                let ballScore = distanceScore;
-                
-                // Big bonus if ball is pottable
-                if (distanceToPocket < 100) {
-                    ballScore += 150;
-                } else if (distanceToPocket < 200) {
-                    ballScore += 75;
+                if (distanceToPocket < 150) {
+                    score += 100; // Good pottability
                 }
-                
-                // Check if angle to ball aligns with pocket
-                const angleToPocket = atan2(closestPocket.y - targetPos.y, closestPocket.x - targetPos.x);
-                let angleDiff = abs(angleToPocket - angleToTarget);
-                if (angleDiff > PI) angleDiff = TWO_PI - angleDiff;
-                
-                // Bonus for good angle
-                if (angleDiff < PI / 4) { // Within 45 degrees
-                    ballScore += 50;
-                }
-                
-                score += ballScore;
-                canHitTargets++;
             }
-            
-            // Bonus for positions that can see more targets
-            score += canHitTargets * 20;
             
             if (score > bestScore) {
                 bestScore = score;
