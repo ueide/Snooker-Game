@@ -346,6 +346,54 @@ class Balls {
     }
 
 
+    // Ensure all balls never leave the green table area
+    constrainBallsToTable() {
+        const r = this.ballRadius;
+        const minX = this.table.x + r;
+        const maxX = this.table.x + this.table.width - r;
+        const minY = this.table.y + r;
+        const maxY = this.table.y + this.table.height - r;
+
+        for (let ball of this.allBalls) {
+            if (!ball || ball.isPotted) continue;
+
+            const pos = ball.body.position;
+            const vel = ball.body.velocity;
+
+            let clampedX = pos.x;
+            let clampedY = pos.y;
+            let newVX = vel.x;
+            let newVY = vel.y;
+            let bounced = false;
+
+            if (pos.x < minX) {
+                clampedX = minX;
+                newVX = Math.abs(vel.x) * 0.8;
+                bounced = true;
+            } else if (pos.x > maxX) {
+                clampedX = maxX;
+                newVX = -Math.abs(vel.x) * 0.8;
+                bounced = true;
+            }
+
+            if (pos.y < minY) {
+                clampedY = minY;
+                newVY = Math.abs(vel.y) * 0.8;
+                bounced = true;
+            } else if (pos.y > maxY) {
+                clampedY = maxY;
+                newVY = -Math.abs(vel.y) * 0.8;
+                bounced = true;
+            }
+
+            if (bounced) {
+                Matter.Body.setPosition(ball.body, { x: clampedX, y: clampedY });
+                Matter.Body.setVelocity(ball.body, { x: newVX, y: newVY });
+            }
+        }
+    }
+
+
     //--- Display Functions ---//
     display() {
         //--- Display all balls ---//
@@ -355,7 +403,7 @@ class Balls {
 
 
         //--- Predicted Path for Balls ---//
-        if(!snookerGame.isShotTaken && this.cueBall && !snookerGame.isCueBallPlacementMode) {
+        if(!snookerGame.isShotTaken && this.cueBall && !snookerGame.isCueBallPlacementMode && !snookerGame.isAITurn()) {
 
             // Get the coordinates of the cue ball
             const cueBallPos = this.cueBall.body.position;
@@ -554,6 +602,8 @@ class Balls {
 
     //--- Check Shot Result: Foul, Score, Ball On Update ---//
     checkShotResult() {
+        if (snookerGame.isGameOver) return;
+
         const pottedBalls = this.pottedObjBallsOnShot;
         const ballOn = snookerGame.BallOn;
         const firstHit = this.firstBallHit;
@@ -674,8 +724,16 @@ class Balls {
                     snookerGame.BallOn = correctedBallOn;
                 } else {
                     snookerGame.BallOn = 'End Game';
-                    snookerGame.displayMessage("All balls potted! Good Job!");
+                    if (snookerGame.isVsMode) {
+                        snookerGame.finishVsGame();
+                    } else {
+                        snookerGame.finishSinglePlayerGame();
+                    }
                 }
+            }
+
+            if (snookerGame.isGameOver) {
+                return;
             }
             // Re-spot potted balls after foul
             snookerGame.ballsToRespot.push(...pottedBalls);
@@ -729,7 +787,11 @@ class Balls {
                             snookerGame.BallOn = order[idX + 1]; // Next Colour in order
                         } else {
                             snookerGame.BallOn = 'End Game'; // End of frame
-                            snookerGame.displayMessage("All balls potted! Good Job!");
+                            if (snookerGame.isVsMode) {
+                                snookerGame.finishVsGame();
+                            } else {
+                                snookerGame.finishSinglePlayerGame();
+                            }
                         }
                     } 
                 }
@@ -856,11 +918,12 @@ class Balls {
         for(let pocket of snookerTable.pockets) {
             const pocketPos = createVector(pocket.x, pocket.y);
             const toPocket = p5.Vector.sub(pocketPos, rayStart);
-            const radius = snookerTable.pocketRadius + 12; // Effective radius for collision
+            const pocketDetectRadius = snookerTable.pocketRadius * 1.2;
+            const radius = pocketDetectRadius; // Match actual pocket detection
 
             const tca = toPocket.dot(directionVector);
             const d2 = toPocket.dot(toPocket) - tca * tca;
-            const radiusEff = radius - ballRadius;
+            const radiusEff = Math.max(1, radius - ballRadius);
 
             if(d2 > radiusEff * radiusEff) continue; // No collision
 
@@ -900,7 +963,7 @@ class Balls {
                         type: 'cushion',
                         targetBall: null,
                         pocket: null,
-                        normalAngle: directionVector.x > 0 ? PI : 0
+                        normal: createVector(directionVector.x > 0 ? -1 : 1, 0)
                     };
                 }
             }
@@ -920,7 +983,7 @@ class Balls {
                         type: 'cushion',
                         targetBall: null,
                         pocket: null,
-                        normalAngle: directionVector.y > 0 ? -HALF_PI : HALF_PI
+                        normal: createVector(0, directionVector.y > 0 ? -1 : 1)
                     };
                 }
             }
@@ -940,7 +1003,7 @@ class Balls {
             startBall,
             'cue_path',
             true, //stopOnBallCollision
-            [800, 400] // Line Lengths
+            [800, 450, 300] // Line Lengths
         );
 
         let allSegments = cueSegments;
@@ -960,8 +1023,8 @@ class Balls {
                 deflectionAngle,
                 targetBall,
                 'object_ball_path',
-                false, //stopOnBallCollision
-                [500, 300] // Line Lengths
+                true, //stopOnBallCollision
+                [500, 350, 250] // Line Lengths
             );
 
             // Combine segments ( cue ball path + object ball path )
@@ -975,7 +1038,7 @@ class Balls {
 
     // Helper function to get prediction segments
     _getPredictionSegments(startPos, startAngle, ballToExclude, pathType, stopOnBallCollision, maxLengths) {
-        const Max_Seg = 2;  // Maximum number of segments to predict
+        const Max_Seg = 3;  // Maximum number of segments to predict
         const segments = []; // To store path segments
         let lastCollision = null; // To store the last collision info
 
@@ -1020,12 +1083,6 @@ class Balls {
             // Calculate end position of the segment
             let pathEndPos = collision.pos;
 
-            if(collision.type === 'cushion') {
-                const incomingVector = p5.Vector.fromAngle(currentAngle);
-                pathEndPos = createVector(collision.pos.x + incomingVector.x * 2,
-                            collision.pos.y + incomingVector.y * 2);
-            }
-
             // Add segment to the list 
             segments.push({start: currentPos, end: pathEndPos, type: pathType, angle: currentAngle});
             lastCollision = collision; // Update last collision
@@ -1052,28 +1109,20 @@ class Balls {
 
             // Bounce off cushion: calculate reflection angle
             if(collision.type === 'cushion') { 
-                const normalAngle = collision.normalAngle;
+                const incomingVector = p5.Vector.fromAngle(currentAngle);
+                const normal = collision.normal;
+                if (!normal) {
+                    break;
+                }
 
-                // Return the absolute angle after reflection
-                if(Math.abs(cos(currentAngle - normalAngle)) > 0.001 &&
-                    (normalAngle === 0 || normalAngle === PI)) {
-                    // Vertical cushion
-                    currentAngle = PI - currentAngle;
-                }
-                else if(Math.abs(sin(currentAngle - normalAngle)) > 0.001 &&
-                    (normalAngle === HALF_PI || normalAngle === -HALF_PI)) {
-                    // Horizontal cushion
-                    currentAngle = -currentAngle;
-                }
-                else {
-                    break; // Angle too close to normal, stop prediction
-                }
+                const dot = incomingVector.dot(normal);
+                const reflected = p5.Vector.sub(incomingVector, p5.Vector.mult(normal, 2 * dot));
+                currentAngle = atan2(reflected.y, reflected.x);
 
                 // Update position slightly beyond cushion to avoid immediate re-collision
-                currentPos = collision.pos; // Update position to collision point
-                const directionVector = p5.Vector.fromAngle(currentAngle);
-                currentPos.x += directionVector.x * 2;
-                currentPos.y += directionVector.y * 2;
+                currentPos = collision.pos;
+                currentPos.x += reflected.x * 2;
+                currentPos.y += reflected.y * 2;
 
                 // Normalize angle between 0 and TWO_PI
                 currentAngle = (currentAngle % TWO_PI + TWO_PI) % TWO_PI; // Normalize angle

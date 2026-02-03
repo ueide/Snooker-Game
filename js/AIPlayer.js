@@ -29,6 +29,9 @@ class AIPlayer {
 
     // Main function to take a turn
     takeTurn() {
+        if (snookerGame && snookerGame.isGameOver) {
+            return;
+        }
         if (this.isThinking) {
             console.log("AI already thinking, skipping");
             return;
@@ -143,7 +146,7 @@ class AIPlayer {
                 snookerBalls.cueBall,
                 'cue_path',
                 true,
-                [800, 400]
+                [800, 450, 300]
             );
 
             // Check what ball we hit first
@@ -191,14 +194,13 @@ class AIPlayer {
     evaluateShot(cueBallPos, targetBallPos, angle, prediction, isHighPriority) {
         let score = 100; // Base score for hitting correct target
         
-        // PRIORITY BONUS: If this is a high-priority target (near pocket and/or near cue)
-        // Give massive boost to make sure AI picks these first
+        // CRITICAL BONUS: High-priority target balls
         if (isHighPriority) {
             score += 300; // Major priority boost
         }
         
-        // MAJOR FACTOR 1: DIRECT PATH vs CUSHION USAGE
-        // Count cushion bounces - heavy penalty for bounces
+        // FACTOR 1: CUSHION BOUNCES
+        // Penalize shots that hit cushions before the target ball
         let cushionBounces = 0;
         for (let segment of prediction.segments) {
             if (segment.type === 'cue_path') {
@@ -214,8 +216,7 @@ class AIPlayer {
             }
         }
         
-        // CRITICAL: Heavily penalize cushion shots
-        // Direct path shots should be strongly preferred
+        // Score adjustment based on cushion bounces
         if (cushionBounces === 0) {
             score += this.weights.directPath; // Excellent: direct shot
         } else {
@@ -223,13 +224,13 @@ class AIPlayer {
         }
         
         // FACTOR 2: DISTANCE TO TARGET BALL
-        // Prefer closer balls - they're easier and more reliable
+        // Closer target balls are preferred
         const distanceToBall = dist(
             cueBallPos.x, cueBallPos.y,
             targetBallPos.x, targetBallPos.y
         );
         
-        // STRONGER weighting for distance - closer balls are MUCH better
+        // Score adjustment based on distance
         if (distanceToBall < 120) {
             score += this.weights.targetDistance * 1.5; // Very close ball
         } else if (distanceToBall < 200) {
@@ -242,7 +243,8 @@ class AIPlayer {
             score += Math.max(0, this.weights.targetDistance * 0.1 - (distanceToBall - 400) / 20);
         }
         
-        // FACTOR 3: POCKET PROXIMITY - Most important for potting
+        // FACTOR 3: PROXIMITY TO POCKETS
+        // Closer target balls to pockets are preferred
         const closestPocket = this.getClosestPocket(targetBallPos);
         const distanceToPocket = dist(
             targetBallPos.x, targetBallPos.y,
@@ -260,8 +262,8 @@ class AIPlayer {
             score += this.weights.pocketProximity * 0.3; // Decent pot opportunity
         }
         
-        // FACTOR 4: ANGLE TO POCKET ALIGNMENT
-        // How well does the shot direction align with pocket direction?
+        // FACTOR 4: ALIGNMENT TO POCKET
+        // Better alignment to pocket increases score
         const angleToPocket = atan2(
             closestPocket.y - targetBallPos.y,
             closestPocket.x - targetBallPos.x
@@ -277,13 +279,12 @@ class AIPlayer {
             angleDiff = TWO_PI - angleDiff;
         }
         
-        // Better alignment = higher score
-        // Perfect alignment (0 degrees) = max score
+        // Score adjustment based on alignment
         const alignmentScore = this.weights.pocketAlignment * (1 - Math.min(1, angleDiff / PI));
         score += alignmentScore;
         
-        // FACTOR 5: TABLE POSITION
-        // Slight preference for balls in center area (more potting opportunities)
+        // FACTOR 5: TABLE CENTERING
+        // Slight preference for balls near table center
         const tableCenterX = snookerTable.feltX + snookerTable.feltWidth / 2;
         const tableCenterY = snookerTable.feltY + snookerTable.feltHeight / 2;
         const distanceToTableCenter = dist(

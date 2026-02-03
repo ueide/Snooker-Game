@@ -72,6 +72,7 @@ function setup() {
         if(!snookerGame.isCueBallPlacementMode) {
             // Apply friction and settle balls smoothly, then check pockets
             snookerBalls.applyRollingFriction();
+            snookerBalls.constrainBallsToTable();
             snookerBalls.checkBallsInPockets();
         }
     });
@@ -180,7 +181,7 @@ function draw() {
         snookerBalls.cueBallPottedOnShot = false; // Reset cue ball potted flag
         
         // Trigger AI turn if it's AI's turn
-        if (snookerGame.isAITurn() && !snookerGame.isCueBallPlacementMode) {
+        if (snookerGame.isAITurn() && !snookerGame.isCueBallPlacementMode && !snookerGame.isGameOver) {
             setTimeout(() => {
                 aiPlayer.takeTurn();
             }, 1000); // 1 second delay before AI takes turn
@@ -249,6 +250,10 @@ function mousePressed() {
         menu.handleMousePressed();
         return;
     }
+
+    if (snookerGame.isGameOver) {
+        return;
+    }
     
     // Prevent interaction during AI turn
     if (snookerGame.isAITurn()) {
@@ -304,6 +309,7 @@ function mousePressed() {
 
 
 function doubleClicked() {
+    if (snookerGame.isGameOver) return;
     if (snookerGame.isAITurn()) return;
     
     if(poolCue && poolCue.isLocked) {
@@ -315,6 +321,10 @@ function doubleClicked() {
 
 
 function mouseDragged() {
+
+    if (snookerGame.isGameOver) {
+        return;
+    }
 
     // ---- Ignore dragging if shot is taken or AI turn ---- //
     if(snookerGame.isShotTaken || snookerGame.isAITurn()) {
@@ -332,6 +342,10 @@ function mouseDragged() {
 
 
 function mouseReleased() {
+
+    if (snookerGame.isGameOver) {
+        return;
+    }
 
     // ---- Shot Power Release ---- //
     if(shotPower.isDragging) {

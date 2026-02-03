@@ -55,6 +55,9 @@ class Game {
         this.uiMessage ='Put the cue ball in play to start the game'
         this.uiMessageTimer = 0; // Timer for displaying UI messages
 
+        this.isGameOver = false;
+        this.winnerMessage = '';
+
         // Don't call startGame() here - let menu handle it
     } // End of constructor
 
@@ -130,6 +133,8 @@ class Game {
         this.foulMessage = '';
         this.isCueBallPlacementMode = true;
         this.ballsToRespot = []; 
+        this.isGameOver = false;
+        this.winnerMessage = '';
         this.displayMessage('Put the cue ball in play to start the game');
     }
 
@@ -213,6 +218,36 @@ class Game {
     //--- Render Messages ---//
     displayMessage(msg) {
         this.uiMessage = msg;
+    }
+
+
+    finishVsGame() {
+        if (this.isGameOver) return;
+
+        this.isGameOver = true;
+        this.isCueBallPlacementMode = false;
+        this.isShotTaken = false;
+
+        let winnerText = '';
+        if (this.player1Score > this.player2Score) {
+            winnerText = 'PLAYER 1 wins!';
+        } else if (this.player2Score > this.player1Score) {
+            winnerText = 'PLAYER 2 wins!';
+        } else {
+            winnerText = 'Draw game!';
+        }
+
+        this.winnerMessage = `${winnerText} Esc to go Menu`;
+        this.displayMessage(this.winnerMessage);
+    }
+
+    finishSinglePlayerGame() {
+        if (this.isGameOver) return;
+        this.isGameOver = true;
+        this.isCueBallPlacementMode = false;
+        this.isShotTaken = false;
+        this.winnerMessage = 'All balls potted! Esc to go Menu';
+        this.displayMessage(this.winnerMessage);
     }
 
 
