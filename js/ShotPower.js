@@ -1,4 +1,9 @@
+/* ShotPower.js
+    Manages the shot power bar display and interactions
+*/
 
+
+//--- ShotPower Class ---//
 class ShotPower {
 
     constructor() {
@@ -17,7 +22,7 @@ class ShotPower {
     }
 
 
-
+    //--- Display Shot Power Bar ---//
     display() {
 
         push();
@@ -75,7 +80,7 @@ class ShotPower {
     }
 
 
-
+    //--- Draw the filled portion of the power bar ---//
     drawPowerBar() {
 
         // Calculate fill height based on shotPower
@@ -112,7 +117,7 @@ class ShotPower {
     } // --- END drawPowerBar ---
 
 
-
+    //--- Draw power level indicators ---//
     drawIndicator() {
 
         // Length of dotted line
@@ -145,9 +150,8 @@ class ShotPower {
     } // --- END drawIndicator ---
 
 
-
+    //--- Draw Cue Illustration ---//
     drawCueIllustration() {
-
         // ---- Cue properties ----
         const cue_height = 200;
         const cue_width = 7;
@@ -191,10 +195,10 @@ class ShotPower {
 
         pop();
 
+    } 
 
-    } // --- END drawCueIllustration ---
 
-
+    //--- Check if mouse is over the shot power bar ---//
     isMouseOver() {
         return mouseX > this.xPos &&
                 mouseX < this.xPos + this.width &&

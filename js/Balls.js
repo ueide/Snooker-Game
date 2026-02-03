@@ -1,8 +1,13 @@
-/* Here is the code for all the BALLS in the game */
-// The Balls class will manage the properties and behaviors of the balls used in the game.
+/* Balls.js
+    Manages all balls on the snooker table, including their properties,
+    positions, movements, collisions, potting, and visual effects.
+*/
 
+
+//---- Balls Class ---//
 class Balls {
 
+    // Table reference 
     constructor(table) {
 
         // Reference to the table object
@@ -33,7 +38,6 @@ class Balls {
                 this.clusterGap = Math.max(0, Math.min(8, g));
             }
         };
-
 
         // Define the properties for each type of ball
         this.balls_prop = {
@@ -118,7 +122,7 @@ class Balls {
     }
 
 
-
+    // Get a random position on the felt area for ball placement
     getRandomFeltPosition() {
         const padding = this.ballRadius * 2;
         return {
@@ -128,15 +132,14 @@ class Balls {
     }
 
 
-
+    // Initialize balls based on selected mode
     initializeBalls(mode) {
 
         // Clear existing balls
         this.reset();
 
-        //--- Mode 05: Full Random Game ---//
-        if (mode === 5) {
-            // Balls to replace: 1 Yellow, 1 Green, 1 Brown, 1 Blue, 1 Pink, 1 Black, 15 Reds
+        //--- MODE 04: FULL RANDOM --- //
+        if(mode === 4) { 
             let ballsToPlace = [
                 this.balls_prop.YELLOW, this.balls_prop.GREEN, this.balls_prop.BROWN,
                 this.balls_prop.BLUE, this.balls_prop.PINK, this.balls_prop.BLACK
@@ -168,11 +171,10 @@ class Balls {
                 } while (overlap); // Repeat until a non-overlapping position is found
                 this.allBalls.push(new Ball(pos.x, pos.y, this.ballRadius, prop, prop.value));
             }
-            return; // Exit after initializing mode 5
+            return; // Exit after initializing mode 4
         }
 
-
-        //--- MODE 01, 02, 03, and 04 --- //
+        //--- MODE 01, 02, 03 (Mode 5 reserved for menu) --- //
         // Place Coloured Balls on their spots
         this.allBalls.push(new Ball(this.balls_spot.YELLOW.x, this.balls_spot.YELLOW.y, this.ballRadius, this.balls_prop.YELLOW, 2));
         this.allBalls.push(new Ball(this.balls_spot.GREEN.x, this.balls_spot.GREEN.y, this.ballRadius, this.balls_prop.GREEN, 3));
@@ -246,14 +248,7 @@ class Balls {
                 }
             }
         }
-        else if(mode === 3) { // mode 3: Practice (15 reds pyramid)
-            // Same as standard mode BUT ONLY RED BALLS ARE THE PREDICTION LINES
-            const redPositions = this.getRedPyramidPositions(this.balls_spot.RED_APEX);
-            for (let pos of redPositions) {
-                redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
-            }
-        }
-        else if(mode === 4) { // mode 4: Red Random - 15 random red balls
+        else if(mode === 3) { // mode 3: Red Random - 15 random red balls
             for(let i = 0; i < 15; i++) {
                 const pos = this.getRandomFeltPosition(); // Get random position on felt
                 redBalls.push(new Ball(pos.x, pos.y, this.ballRadius, this.balls_prop.RED, 1));
@@ -264,13 +259,15 @@ class Balls {
     };
 
 
-    // ---- Animations API ---- //
+    //--- Visual Effects: Cue Impact and Pocket Entry ---//
+    //cue impact animation
     addCueImpact(x, y) {
         this.animations.push({
             type: 'cueImpact', x, y, start: millis(), duration: 220
         });
     }
 
+    // pocket entry animation
     addPocketEntry(x, y, color) {
         this.animations.push({
             type: 'pocketEntry', x, y, start: millis(), duration: 400,
@@ -278,6 +275,7 @@ class Balls {
         });
     }
 
+    // Draw ongoing animations
     drawAnimations() {
         if(!this.animations.length) return;
         const now = millis();
@@ -318,7 +316,7 @@ class Balls {
     }
 
 
-    // Apply rolling resistance and snap tiny velocities to zero for smooth stops
+    // Apply rolling friction to all balls
     applyRollingFriction() {
         const delta = (engine && engine.timing && engine.timing.delta) ? engine.timing.delta : 16.666;
         const linDecay = Math.max(0, 1 - this.rollingFrictionCoeff * delta);
@@ -348,17 +346,15 @@ class Balls {
     }
 
 
-
+    //--- Display Functions ---//
     display() {
-        // ---- Display all balls ---- //
+        //--- Display all balls ---//
         for (let ball of this.allBalls) {
             ball.display();
         }
-        // ---- End display all balls ---- //
 
 
-
-        // ---- Predicted Path for Balls ---- //
+        //--- Predicted Path for Balls ---//
         if(!snookerGame.isShotTaken && this.cueBall && !snookerGame.isCueBallPlacementMode) {
 
             // Get the coordinates of the cue ball
@@ -386,12 +382,6 @@ class Balls {
                 }
                 // Coloured balls path after hit (dashed line)
                 else if (segment.type.startsWith('object_ball_')) {
-                    // Practice mode (3): show dashed path only for RED object balls
-                    if (snookerGame.gameMode === 3) {
-                        if (!segment.objectBallName || segment.objectBallName !== 'Red') {
-                            continue;
-                        }
-                    }
                     const centerBall = segment.start;
                     const deflectionAngle = segment.angle;
                     const endPos = segment.end;
@@ -424,13 +414,13 @@ class Balls {
             pop(); // End first push
         }
 
-        // ---- Overlay animations (cue impact, pocket entry) ---- //
+        // Draw ongoing animations
         this.drawAnimations();
     }
 
 
 
-    // Place the cue ball at specified coordinates
+    //--- Place Cue Ball ---//
     placeCueBall(x, y) {
         const cueProps = this.balls_prop.CUE;
 
@@ -452,7 +442,7 @@ class Balls {
     }
 
 
-
+    //--- Display Cue Ball Hand ---//
     displayCueBallHand(){
         // Display semi-transparent cue ball at mouse position during placement
         push();
@@ -465,7 +455,7 @@ class Balls {
     }
 
 
-
+    //--- Ball Movement and Collision Handling ---//
     areBallsMoving() { 
         const movimentThreshold = 0.001; // Velocity threshold to consider ball as moving
         const angularThreshold = 0.01; // Angular velocity threshold
@@ -488,7 +478,7 @@ class Balls {
     }
 
 
-
+    // Check for potted balls
     checkBallsInPockets() { // Check and handle balls that have been potted
         for (let i = this.allBalls.length - 1; i >= 0; i--) {
             let ball = this.allBalls[i];
@@ -527,7 +517,7 @@ class Balls {
     }
 
 
-
+    // Handle collision events to track first ball hit by cue ball
     handleCollision(event) { // Track first ball hit by cue ball
         const pairs = event.pairs;
 
@@ -556,13 +546,13 @@ class Balls {
     } // End handleCollision
 
 
-
+    //--- Check for Reds Remaining ---//
     hasRedsRemaining() { // Check if any red balls are still on the table
         return this.allBalls.some(ball => ball.color.name === 'Red' && !ball.isPotted);
     }
 
 
-
+    //--- Check Shot Result: Foul, Score, Ball On Update ---//
     checkShotResult() {
         const pottedBalls = this.pottedObjBallsOnShot;
         const ballOn = snookerGame.BallOn;
@@ -689,6 +679,11 @@ class Balls {
             }
             // Re-spot potted balls after foul
             snookerGame.ballsToRespot.push(...pottedBalls);
+            
+            // Switch player in VS mode after foul
+            if (snookerGame.isVsMode) {
+                snookerGame.switchPlayer();
+            }
 
         } 
         else {
@@ -745,12 +740,17 @@ class Balls {
                     nextBallOn = 'Red'; // After Colour, Ball On goes to Red
                 }
                 snookerGame.displayMessage("No ball potted.");
+                
+                // Switch player in VS mode when no balls potted
+                if (snookerGame.isVsMode) {
+                    snookerGame.switchPlayer();
+                }
             }
         } // end isFoul
     } // End checkShotResult
 
 
-
+    // Re-spot potted coloured balls
     reSpotBall(pottedBall) {
 
         if(pottedBall.color.name === 'Red' && !snookerGame.foulCommitted) return; // Reds are not re-spotted unless foul
@@ -811,7 +811,7 @@ class Balls {
     }
 
 
-
+    //--- Predictive Path Calculation ---//
     findClosestColission(startPos, directionAngle, ballRadius, ballToExclude) {
         let closestCollision = {
             dist: Infinity,
@@ -931,7 +931,7 @@ class Balls {
     } // ---- End of findClosestColission ---- //
 
 
-
+    // Draw predicted path for cue ball and object ball
     drawPredictedPath(startBall, initialAngle) {
         // ---- Cue Ball (solid line)Path Prediction ---- //
         const {segments: cueSegments, lastCollision} = this._getPredictionSegments(
@@ -1005,9 +1005,6 @@ class Balls {
                 break; // No more collisions
             }
 
-
-
-            // ---- Collision found ----- //
 
             //-- Check if collision is beyond max length 
             if(collision.dist > currentMaxLength) {

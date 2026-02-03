@@ -1,4 +1,9 @@
+/* Table.js
+    Defines the Table class for the snooker game
+*/
 
+
+//--- Table Class ---//
 class Table {
 
     constructor() {
@@ -154,8 +159,6 @@ class Table {
         // ---- CONSTANTS ---- //
         const wd_f = this.woodFrameThickness;
         const pk_R = this.pocketRadius;
-        // const pk_diam = this.pocketDiameter;
-        // const pk_OS = this.pocket_OffSet;
         const cu_w = this.cushionWidth;
         const inlaySize = this.inlay_size;
 
@@ -222,7 +225,7 @@ class Table {
 
 
         // ---- D-ZONE AND BAULK LIEN (white lines) ---- //
-        stroke(200, 180); // Light gray // color and transparency
+        stroke(200, 180); // White color for lines
         strokeWeight(2);
         noFill();
 
@@ -378,7 +381,6 @@ class Table {
     }
 
 
-
     isBallInPocket(ball) {
         // Check if the ball is in any pocket
         const ballPos = ball.body.position;
@@ -393,7 +395,6 @@ class Table {
         }
         return null; // Ball is not in any pocket
     }
-
 
 
     drawPockets() {

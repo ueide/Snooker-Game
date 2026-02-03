@@ -1,4 +1,9 @@
+/* Game.js
+    Defines the Game class which manages game state, scoring, and modes.
+*/
 
+
+//--- Game Class ---//
 class Game {
     static CANVAS_WIDTH = 1440;
     static CANVAS_HEIGHT = 700;
@@ -21,8 +26,16 @@ class Game {
     static COLOR_ORDER = ["Yellow", "Green", "Brown", "Blue", "Pink", "Black"];
 
 
-
     constructor() {
+        // VS Mode properties
+        this.isVsMode = false;
+        this.currentPlayer = 1; // 1 or 2
+        this.player1Score = 0;
+        this.player2Score = 0;
+        this.player1Break = 0;
+        this.player2Break = 0;
+        
+        // Single player properties
         this.playerScore = 0;
         this.currentBreak = 0;
         this.highBreak = 0;
@@ -46,7 +59,7 @@ class Game {
     } // End of constructor
 
 
-
+    //--- Get Ball Value ---//
     getBallValue(name) {
         if(Game.BALL_INFO[name]) {
             return Game.BALL_INFO[name].value;
@@ -54,34 +67,61 @@ class Game {
         return 0; // Default to 0 for unknown balls
     }
 
-
+    //--- Update Score After Potting a Ball ---//
     updateScore(ballValue) {
-        this.playerScore += ballValue;
-        this.currentBreak += ballValue;
-        if(this.currentBreak > this.highBreak) {
-            this.highBreak = this.currentBreak;
-        }
+        this.addScore(ballValue);
     }
 
 
+    //--- Apply Foul Penalty ---//
     applyFoul(penalty, message) { // Penalty and message
-        this.playerScore -= penalty;
-        // Ensure score never goes below 0
-        if(this.playerScore < 0) {
-            this.playerScore = 0;
+        // In VS mode, opponent gets the points
+        if (this.isVsMode) {
+            const opponentPlayer = this.currentPlayer === 1 ? 2 : 1;
+            if (opponentPlayer === 1) {
+                this.player1Score += penalty;
+            } else {
+                this.player2Score += penalty;
+            }
+        } else {
+            this.playerScore -= penalty;
+            // Ensure score never goes below 0
+            if(this.playerScore < 0) {
+                this.playerScore = 0;
+            }
         }
+        
         this.foulCommitted = true;
         this.foulMessage = message;
         this.displayMessage(`${message} (- ${penalty})`);
-        this.currentBreak = 0;
+        
+        // Reset break
+        if (this.isVsMode) {
+            if (this.currentPlayer === 1) {
+                this.player1Break = 0;
+            } else {
+                this.player2Break = 0;
+            }
+        } else {
+            this.currentBreak = 0;
+        }
     }
 
 
-
+    //--- Start or Restart Game ---//
     startGame() {
         // Reset all game variables for a new game
-        this.playerScore = 0; 
-        this.currentBreak = 0; 
+        if (this.isVsMode) {
+            this.player1Score = 0;
+            this.player2Score = 0;
+            this.player1Break = 0;
+            this.player2Break = 0;
+            this.currentPlayer = 1; // Player 1 starts
+        } else {
+            this.playerScore = 0;
+            this.currentBreak = 0;
+        }
+        
         this.BallOn = 'Red';
         this.pottedReds = 0;
         this.consecutiveColoredPots = 0;
@@ -93,8 +133,60 @@ class Game {
         this.displayMessage('Put the cue ball in play to start the game');
     }
 
+    startVsMode() {
+        this.isVsMode = true;
+        this.gameMode = 1; // Always standard mode for VS
+        this.startGame();
+    }
+
+    switchPlayer() {
+        if (!this.isVsMode) return;
+        
+        // Switch between player 1 and 2
+        this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
+        
+        // Reset current break
+        if (this.currentPlayer === 1) {
+            this.player1Break = 0;
+        } else {
+            this.player2Break = 0;
+        }
+        
+        console.log(`Switched to Player ${this.currentPlayer}'s turn`);
+    }
+
+    addScore(points) {
+        if (this.isVsMode) {
+            if (this.currentPlayer === 1) {
+                this.player1Score += points;
+                this.player1Break += points;
+            } else {
+                this.player2Score += points;
+                this.player2Break += points;
+            }
+        } else {
+            this.playerScore += points;
+            this.currentBreak += points;
+            if (this.currentBreak > this.highBreak) {
+                this.highBreak = this.currentBreak;
+            }
+        }
+    }
+
+    getCurrentBreak() {
+        if (this.isVsMode) {
+            return this.currentPlayer === 1 ? this.player1Break : this.player2Break;
+        } else {
+            return this.currentBreak;
+        }
+    }
+
+    isAITurn() {
+        return this.isVsMode && this.currentPlayer === 2;
+    }
 
 
+    //--- Get Next Colour Ball in Sequence ---//
     getNextColourBall(currentBallName) { // Get next coloured ball in sequence
         const idX = Game.COLOR_ORDER.indexOf(currentBallName);
         if(idX !== -1 && idX < Game.COLOR_ORDER.length - 1) {
@@ -118,15 +210,102 @@ class Game {
     }
 
 
-
-    // render messages
+    //--- Render Messages ---//
     displayMessage(msg) {
         this.uiMessage = msg;
     }
 
 
-
+    //--- Display Header ---//
     displayHeader() {
+        if (this.isVsMode) {
+            this.displayVsHeader();
+        } else {
+            this.displaySinglePlayerHeader();
+        }
+    }
+
+    displayVsHeader() {
+        // Constants
+        const HEADER_HEIGHT = 88;
+        const PADDING = 96;
+
+        // Draw header background
+        noStroke();
+        fill(19, 32, 50);
+        rect(0, 0, Game.CANVAS_WIDTH, HEADER_HEIGHT);
+
+        // Player 1 section
+        const p1X = PADDING;
+        const p1HighlightWidth = 320;
+        const p1HighlightHeight = 60;
+        const p1HighlightY = (HEADER_HEIGHT - p1HighlightHeight) / 2;
+
+        // Highlight for current player
+        if (this.currentPlayer === 1) {
+            fill(80, 120, 80); // Green highlight
+        } else {
+            fill(40, 60, 70); // Darker background
+        }
+        rect(p1X - 16, p1HighlightY, p1HighlightWidth, p1HighlightHeight, 8);
+
+
+        // Player 1 text
+        fill(this.currentPlayer === 1 ? 255 : 200);
+        textSize(20);
+        textAlign(LEFT, TOP);
+        textStyle(BOLD);
+        text("PLAYER 1", p1X, p1HighlightY + 8);
+        
+        textStyle(NORMAL);
+        textSize(18);
+        text(`Score: ${this.player1Score}  |  Break: ${this.player1Break}`, p1X, p1HighlightY + 34);
+
+        // Player 2 section (AI)
+        const p2X = Game.CANVAS_WIDTH - PADDING - p1HighlightWidth + 16;
+        
+        // Highlight for current player
+        if (this.currentPlayer === 2) {
+            fill(120, 80, 80); // Red highlight
+        } else {
+            fill(40, 60, 70); // Darker background
+        }
+        rect(p2X, p1HighlightY, p1HighlightWidth, p1HighlightHeight, 8);
+
+        // Player 2 text
+        fill(this.currentPlayer === 2 ? 255 : 200);
+        textSize(20);
+        textAlign(LEFT, TOP);
+        textStyle(BOLD);
+        text("PLAYER 2 (AI)", p2X + 16, p1HighlightY + 8);
+        
+        textStyle(NORMAL);
+        textSize(18);
+        text(`Score: ${this.player2Score}  |  Break: ${this.player2Break}`, p2X + 16, p1HighlightY + 34);
+
+        // Center - Ball On
+        const centerX = Game.CANVAS_WIDTH / 2;
+        fill(210);
+        textSize(16);
+        textAlign(CENTER, CENTER);
+        textStyle(NORMAL);
+        let displayBallOn = this.BallOn;
+        if(displayBallOn.includes('_')) {
+            displayBallOn = displayBallOn === 'Colour' ? 'Colour' : displayBallOn.replace('_C', ' ');
+        }
+        text(`Ball On: ${displayBallOn}`, centerX, HEADER_HEIGHT / 2);
+
+        // Display Message
+        if(this.uiMessage) {
+            fill(230);
+            textSize(18);
+            textAlign(CENTER, CENTER);
+            text(this.uiMessage, Game.CANVAS_WIDTH / 2, Game.CANVAS_HEIGHT - 80);
+        }
+    }
+
+    //--- Display Single Player Header ---//
+    displaySinglePlayerHeader() {
         // Constants
         const HEADER_HEIGHT = 88;
         const PADDING = 96;
@@ -175,14 +354,13 @@ class Game {
             textAlign(CENTER, CENTER);
             text(this.uiMessage, Game.CANVAS_WIDTH / 2, Game.CANVAS_HEIGHT - 80);
         }
-
     }
 
 
 
-
+    //--- Set Game Mode ---//
     setGameMode(newMode) {
-        if(newMode >= 1 && newMode <= 5) {
+        if(newMode >= 1 && newMode <= 4) {
             this.gameMode = newMode;
             //console.log(`Game mode set to: ${newMode}`);
             this.startGame(); // Restart game on mode change
@@ -192,7 +370,13 @@ class Game {
     }
 
 
+    //--- Display Game Mode ---//
     displayGameMode() {
+        // Don't display game mode selector in VS mode
+        if (this.isVsMode) {
+            return;
+        }
+        
         // Constants for positioning
         const X_start = Game.CANVAS_WIDTH - 220; // X position for text
         const y_position = 188;
@@ -205,14 +389,14 @@ class Game {
         const Y_mode2 = y_position + space_between * 3 + 8; // Y position for mode 2
         const Y_mode3 = y_position + space_between * 4 + 16; // Y position for mode 3
         const Y_mode4 = y_position + space_between * 5 + 24; // Y position for mode 4
-        const Y_mode5 = y_position + space_between * 6 + 32; // Y position for mode 5
+        const Y_mode5 = y_position + space_between * 6 + 32; // Y position for menu key
 
         // Map actual game mode numbers to their display Y positions
         const modeMap_Y = {
             1: Y_mode1,   // Standard
             2: Y_mode2,   // Cluster
-            4: Y_mode3,   // Red Random
-            5: Y_mode4    // Full Random
+            3: Y_mode3,   // Red Random
+            4: Y_mode4    // Full Random
         };
 
 
@@ -249,8 +433,8 @@ class Game {
         const textOptions = [ 
             {text: "1: Standard", y: Y_mode1, mode: 1 },
             {text: "2: Cluster", y: Y_mode2, mode: 2 },
-            {text: "3: Red Random", y: Y_mode3, mode: 4 },
-            {text: "4: Full Random", y: Y_mode4, mode: 5 },
+            {text: "3: Red Random", y: Y_mode3, mode: 3 },
+            {text: "4: Full Random", y: Y_mode4, mode: 4 },
             {text: "5: Menu", y: Y_mode5, mode: 0 }
         ];
 

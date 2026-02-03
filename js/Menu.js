@@ -1,3 +1,9 @@
+/* Menu.js
+    Handles the main menu display and interactions
+*/
+
+
+//--- Menu Class ---//
 class Menu {
     constructor() {
         this.isActive = true;
@@ -75,6 +81,8 @@ class Menu {
         pop();
     }
 
+
+    // Check if mouse is over a button
     isMouseOverButton(button) {
         return mouseX > button.x - button.width / 2 &&
                 mouseX < button.x + button.width / 2 &&
@@ -82,6 +90,8 @@ class Menu {
                 mouseY < button.y + button.height / 2;
     }
 
+
+    // Handle mouse press events
     handleMousePressed() {
         if (this.isMouseOverButton(this.singlePlayerButton)) {
             this.startSinglePlayerGame();
@@ -90,6 +100,8 @@ class Menu {
         }
     }
 
+
+    //--- Start Single Player Game ---//
     startSinglePlayerGame() {
         this.isActive = false;
         // Initialize the game
@@ -99,20 +111,24 @@ class Menu {
         console.log("Starting Single Player game...");
     }
 
+    //--- Start Vs Cop Game ---//
     startVsCopGame() {
         this.isActive = false;
         // Initialize the game for VS Cop mode
-        snookerGame.setGameMode(1); // Standard mode (can be changed later for AI)
-        snookerBalls.initializeBalls(1);
+        snookerGame.startVsMode(); // Start VS mode
+        snookerBalls.initializeBalls(1); // Always standard mode
         snookerGame.isCueBallPlacementMode = true;
         console.log("Starting Vs Cop game...");
     }
 
+    //--- Return to Menu ---//
     returnToMenu() {
         this.isActive = true;
         // Clear all balls from the game
         snookerBalls.reset();
         snookerBalls.isCueBallPlaced = false;
+        // Reset VS mode
+        snookerGame.isVsMode = false;
         console.log("Returning to menu...");
     }
 }

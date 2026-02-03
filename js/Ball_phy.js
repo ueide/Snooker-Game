@@ -1,6 +1,9 @@
+/* Ball_phy.js
+    Defines the Ball class with Matter.js physics integration
+*/
 
-/* Here is the physics code for the BALL appled to all the balls in the game */
 
+//---- Ball Class -----//
 class Ball {
 
     constructor(x, y, radius, color, value, isCueBall = false) {
@@ -12,7 +15,7 @@ class Ball {
         this.inPocket = false;
         this.isPotted = false;
 
-        // ---- Matter.js physics body ----
+        // ---- Matter.js physics body ----//
         this.body = Matter.Bodies.circle(x, y, radius, {
             label: isCueBall ? 'cueBall' : color.name, // Identifier for the ball
             // Physics tuned for smoother snooker-like behaviour
@@ -33,7 +36,7 @@ class Ball {
     } // end constructor
 
 
-
+    //--- Display the ball on the canvas -----//
     display() {
 
         if(this.isPotted) return; // Don't display if potted

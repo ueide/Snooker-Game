@@ -1,4 +1,9 @@
+/* PoolCue.js
+    Represents the pool cue used to strike the cue ball
+*/
 
+
+//--- PoolCue Class ---//
 class PoolCue {
 
     constructor() {
@@ -30,6 +35,7 @@ class PoolCue {
     }
 
 
+    //--- Display Pool Cue ---//
     display(cueBallX, cueBallY, mouseX, mouseY) {
         let angle;
         let cueX = cueBallX
@@ -38,7 +44,6 @@ class PoolCue {
         if(snookerGame.isShotTaken) {
             return; // Do not display the cue if the shot has been taken
         }
-
 
         // Determine cue position
         if(this.isLocked) {
@@ -60,7 +65,6 @@ class PoolCue {
             cueY = cueBallY - sin(angle) * 8;
 
         }
-
 
 
         // ---- Draw the Pool cue ---- //
@@ -113,6 +117,5 @@ class PoolCue {
 
         pop();
     }
-
 
 }
